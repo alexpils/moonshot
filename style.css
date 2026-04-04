@@ -1,0 +1,79 @@
+:root {
+  color-scheme: dark;
+  --bg: #050816;
+  --panel: rgba(10, 14, 30, 0.80);
+  --panel-border: rgba(170, 200, 255, 0.15);
+  --text: #e7f0ff;
+  --muted: #98a7cc;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(40,60,120,0.16), transparent 25%),
+    radial-gradient(circle at 80% 10%, rgba(80,80,150,0.14), transparent 20%),
+    radial-gradient(circle at 50% 80%, rgba(0,90,140,0.12),  transparent 25%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.game-shell {
+  position: relative;
+  width: min(100vw - 8px, calc((100vh - 8px) * 1.5));
+}
+
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  image-rendering: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(140,180,255,0.18);
+  box-shadow: 0 30px 90px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03);
+  /* No CSS background — game fills canvas fully via fillRect */
+}
+
+/* Controls legend — top-RIGHT corner, never overlaps HUD panel */
+.overlay {
+  position: absolute;
+  top: 18px;
+  right: 18px;          /* ← was left:18px, now right */
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  pointer-events: none; /* keys pass through to window */
+}
+
+.title {
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  font-size: 15px;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moonshot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="game-shell">
+    <canvas id="game" width="2400" height="1600"></canvas>
+    <!-- Controls legend top-right; pointer-events:none so keys still reach canvas -->
+    <div class="overlay">
+      <div class="title">MOONSHOT</div>
+      <div class="subtitle">Reach stable lunar orbit</div>
+      <div class="controls">
+        <span>A / D &nbsp;Rotate</span>
+        <span>W / ↑ / Space &nbsp;Thrust</span>
+        <span>1–4 &nbsp;Time Warp</span>
+        <span>R &nbsp;Restart</span>
+      </div>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
