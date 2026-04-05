@@ -28,14 +28,16 @@ const STABLE_HOLD  = 60;  // seconds within lunar distance band to win
 const PRED_STEPS = 140;
 const PRED_DT    = 0.09; // sim-s per prediction step
 const TRAIL_MAX  = 450;
-const ESCAPE_DIST = 1120;
+const ESCAPE_DIST = Math.hypot(W/2, H/2); // triggers exactly at canvas edge
 const SUN_X = -900; // Sun is far off to the left (off-canvas)
 const SUN_Y = CY;
 
 // Stars (generated once, never redrawn outside render)
-const STARS = Array.from({length:200}, () => ({
+// depth: 0=far/slow parallax, 1=close/fast parallax
+const STARS = Array.from({length:220}, () => ({
   x: Math.random()*W, y: Math.random()*H,
   r: Math.random()*1.4+0.25, a: Math.random()*0.65+0.35,
+  depth: Math.random(), // parallax layer
 }));
 
 // Input
@@ -245,13 +247,17 @@ function evalState(dEarth, dMoon, realDt) {
   if (dMoon  <= MOON_R  + 5)  return end('lose', 'CRASHED INTO THE MOON');
   if (Math.hypot(rocket.x-CX, rocket.y-CY) > ESCAPE_DIST)
                                return end('lose', 'LOST IN SPACE');
+  // Out of fuel AND not already in lunar orbit — no way to complete mission
+  const _fuelMoon = moonXY(state.moonAngle);
+  const _fuelDistM = Math.hypot(rocket.x - _fuelMoon.x, rocket.y - _fuelMoon.y);
+  if (rocket.fuel <= 0 && _fuelDistM >= STABLE_OUTER) return end('lose', 'OUT OF FUEL');
 
   const moon  = moonXY(state.moonAngle);
   const distM = Math.hypot(rocket.x-moon.x, rocket.y-moon.y);
   const mvx   = -Math.sin(state.moonAngle) * MOON_ORBIT * MOON_OMEGA;
   const mvy   =  Math.cos(state.moonAngle) * MOON_ORBIT * MOON_OMEGA;
   const relV  = Math.hypot(rocket.vx-mvx, rocket.vy-mvy);
-  const inBand = distM >= STABLE_INNER && distM < STABLE_OUTER;
+  const inBand = distM < STABLE_OUTER; // no inner limit — just stay within outer boundary
 
   if (inBand) {
     state.stableTimer += realDt;
@@ -475,15 +481,23 @@ function render() {
   ctx.fillStyle = '#040814';
   ctx.fillRect(0, 0, W, H);
 
-  // Stars
-  for (const s of STARS) {
-    ctx.globalAlpha = s.a;
-    ctx.fillStyle = '#dbeafe';
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-    ctx.fill();
+  // Stars — parallax offset relative to rocket position
+  {
+    const parallaxScale = 0.18; // noticeable drift
+    const ox = (rocket.x - CX) * parallaxScale;
+    const oy = (rocket.y - CY) * parallaxScale;
+    for (const s of STARS) {
+      // Far stars (depth≈0) barely move; close stars (depth≈1) move more
+      const sx = ((s.x - ox * s.depth) % W + W) % W;
+      const sy = ((s.y - oy * s.depth) % H + H) % H;
+      ctx.globalAlpha = s.a;
+      ctx.fillStyle = '#dbeafe';
+      ctx.beginPath();
+      ctx.arc(sx, sy, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   const moon = moonXY(state.moonAngle);
 
@@ -499,7 +513,7 @@ function render() {
 
   // Win-zone circles: inner + outer boundary, bright when rocket is inside
   const distToMoon = Math.hypot(rocket.x - moon.x, rocket.y - moon.y);
-  const inWinZone  = distToMoon >= STABLE_INNER && distToMoon < STABLE_OUTER;
+  const inWinZone  = distToMoon < STABLE_OUTER; // matches evalState
   const zoneColor  = inWinZone ? 'rgba(134,239,172,0.90)' : 'rgba(134,239,172,0.22)';
   const zoneWidth  = inWinZone ? 2.5 : 1.0;
   ctx.strokeStyle  = zoneColor;
@@ -665,53 +679,158 @@ function drawHUD(moon) {
   const dM    = Math.hypot(rocket.x-moon.x, rocket.y-moon.y);
   const warp  = WARP_LEVELS[state.warpIdx];
   const okCol = state.outcome === 'win' ? '#86efac' : '#fca5a5';
-
-  // Info panel (bottom-left)
-  const px=22, py=H-205, pw=420, ph=180;
-  ctx.save();
-  ctx.fillStyle   = 'rgba(6,10,24,0.88)';
-  ctx.strokeStyle = 'rgba(150,180,255,0.18)';
-  ctx.lineWidth   = 1;
-  rrect(px, py, pw, ph, 14); ctx.fill(); ctx.stroke();
-
-  ctx.fillStyle = state.outcome === 'playing' ? '#e7f0ff' : okCol;
-  ctx.font = '700 18px Inter,ui-sans-serif,sans-serif';
-  ctx.fillText(state.message, px+18, py+32);
-
-  const pct = Math.max(0, Math.min(1, rocket.fuel / 100));
+  const pct   = Math.max(0, Math.min(1, rocket.fuel / 100));
   const fuelColor = pct > 0.3 ? '#38bdf8' : pct > 0.12 ? '#fbbf24' : '#f87171';
 
-  // Safe fuel row (simple rects only, no rounded giant blob accidents)
-  const fuelLabelX = px + 18;
-  const fuelRowY = py + 58;
-  ctx.fillStyle = '#9fb2d8';
-  ctx.font = '700 14px Inter,ui-sans-serif,sans-serif';
-  ctx.fillText('FUEL', fuelLabelX, fuelRowY - 10);
+  // ── Status bar (top-centre) ──────────────────────────────────────────────
+  {
+    const label = state.outcome === 'playing' ? state.message : '';
+    if (label) {
+      ctx.save();
+      ctx.font = '700 22px Inter,ui-sans-serif,sans-serif';
+      ctx.textAlign = 'center';
+      const tw = ctx.measureText(label).width;
+      const bw = tw + 48, bh = 40;
+      const bx = W/2 - bw/2, by = 28;
+      ctx.fillStyle = 'rgba(6,10,24,0.78)';
+      ctx.strokeStyle = 'rgba(150,180,255,0.20)';
+      ctx.lineWidth = 1;
+      rrect(bx, by, bw, bh, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#c8d8f8';
+      ctx.fillText(label, W/2, by + 26);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+  }
 
-  ctx.fillStyle = fuelColor;
-  ctx.font = '800 24px Inter,ui-sans-serif,sans-serif';
-  ctx.fillText(rocket.fuel.toFixed(0) + '%', fuelLabelX, fuelRowY + 18);
+  // ── Fuel bar (bottom-centre, thin strip) ─────────────────────────────────
+  {
+    const bw = 500, bh = 8, bx = W/2 - bw/2, by = H - 60;
+    ctx.save();
+    // Track
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    rrect(bx, by, bw, bh, 4); ctx.fill();
+    // Fill
+    ctx.fillStyle = fuelColor;
+    rrect(bx, by, bw * pct, bh, 4); ctx.fill();
+    // Label left
+    ctx.font = '700 13px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = '#6b82a8';
+    ctx.textAlign = 'left';
+    ctx.fillText('FUEL', bx, by - 6);
+    // Value right
+    ctx.textAlign = 'right';
+    ctx.fillStyle = fuelColor;
+    ctx.font = '700 13px Inter,ui-sans-serif,sans-serif';
+    ctx.fillText(rocket.fuel.toFixed(0) + '%', bx + bw, by - 6);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
 
-  const barX = px + 112;
-  const barY = py + 52;
-  const barW = pw - 130;
-  const barH = 20;
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  ctx.fillRect(barX, barY, barW, barH);
-  ctx.fillStyle = fuelColor;
-  ctx.fillRect(barX, barY, barW * pct, barH);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.strokeRect(barX, barY, barW, barH);
+  // ── Speed gauge (arc, bottom-left) ──────────────────────────────────────
+  {
+    const gx = 120, gy = H - 118; // centre of gauge
+    const gr = 82;                 // radius
+    const MAX_SPD = 1000;
+    const startA  = Math.PI * 0.75;   // 135° (bottom-left)
+    const endA    = Math.PI * 2.25;   // 405° (bottom-right) → 270° sweep
+    const pct     = Math.min(speed / MAX_SPD, 1);
+    const fillEnd = startA + (endA - startA) * pct;
 
-  ctx.fillStyle = '#7a8cb0';
-  ctx.font = '15px Inter,ui-sans-serif,sans-serif';
-  [
-    'Speed:      ' + speed.toFixed(1)       + ' u/s',
-    'Dist Earth: ' + dE.toFixed(0)          + ' u',
-    'Dist Moon:  ' + dM.toFixed(0)          + ' u',
-    'Time Warp:  ' + warp + '\u00d7  (1\u20134)',
-  ].forEach((t,i) => ctx.fillText(t, px+18, py+104+i*18));
-  ctx.restore();
+    // Speed-based colour: blue → yellow → red
+    const spdColor = speed < 400 ? '#38bdf8' : speed < 700 ? '#fbbf24' : '#f87171';
+
+    ctx.save();
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(gx, gy, gr + 2, startA, endA);
+    ctx.strokeStyle = 'rgba(100,140,255,0.08)';
+    ctx.lineWidth = 18;
+    ctx.stroke();
+
+    // Track
+    ctx.beginPath();
+    ctx.arc(gx, gy, gr, startA, endA);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'butt';
+    ctx.stroke();
+
+    // Tick marks (every 100 u/s)
+    for (let v = 0; v <= MAX_SPD; v += 100) {
+      const a = startA + (endA - startA) * (v / MAX_SPD);
+      const inner = v % 500 === 0 ? gr - 18 : gr - 12;
+      ctx.beginPath();
+      ctx.moveTo(gx + Math.cos(a) * inner, gy + Math.sin(a) * inner);
+      ctx.lineTo(gx + Math.cos(a) * (gr + 2), gy + Math.sin(a) * (gr + 2));
+      ctx.strokeStyle = v % 500 === 0 ? 'rgba(180,200,255,0.5)' : 'rgba(180,200,255,0.2)';
+      ctx.lineWidth = v % 500 === 0 ? 2 : 1;
+      ctx.stroke();
+    }
+
+    // Active arc
+    if (pct > 0) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, gr, startA, fillEnd);
+      ctx.strokeStyle = spdColor;
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // Needle dot
+    ctx.beginPath();
+    ctx.arc(gx + Math.cos(fillEnd) * gr, gy + Math.sin(fillEnd) * gr, 7, 0, Math.PI*2);
+    ctx.fillStyle = spdColor;
+    ctx.fill();
+
+    // Centre readout
+    ctx.textAlign = 'center';
+    ctx.font = '800 28px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = spdColor;
+    ctx.fillText(speed.toFixed(0), gx, gy + 10);
+    ctx.font = '600 12px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = '#4a6080';
+    ctx.fillText('u/s', gx, gy + 28);
+
+    // MAX label at end
+    ctx.font = '600 11px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = 'rgba(180,200,255,0.3)';
+    ctx.fillText('1000', gx + Math.cos(endA) * (gr + 16), gy + Math.sin(endA) * (gr + 16) + 4);
+    ctx.fillText('0',    gx + Math.cos(startA) * (gr + 16), gy + Math.sin(startA) * (gr + 16) + 4);
+
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  // ── Telemetry pills (bottom-left, shifted right of gauge) ────────────────
+  {
+    const items = [
+      { label: 'EARTH', value: dE.toFixed(0) + ' u' },
+      { label: 'MOON',  value: dM.toFixed(0) + ' u' },
+      { label: 'WARP',  value: warp + '×' },
+    ];
+    const pillH = 44, pillGap = 10;
+    const pillW = 130;
+    const startX = 230, startY = H - 80;
+    ctx.save();
+    items.forEach((item, i) => {
+      const x = startX + i * (pillW + pillGap);
+      const y = startY;
+      ctx.fillStyle = 'rgba(6,10,24,0.82)';
+      ctx.strokeStyle = 'rgba(100,140,255,0.15)';
+      ctx.lineWidth = 1;
+      rrect(x, y, pillW, pillH, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#4a6080';
+      ctx.font = '600 11px Inter,ui-sans-serif,sans-serif';
+      ctx.fillText(item.label, x + 10, y + 14);
+      ctx.fillStyle = '#ccddf8';
+      ctx.font = '700 16px Inter,ui-sans-serif,sans-serif';
+      ctx.fillText(item.value, x + 10, y + 33);
+    });
+    ctx.restore();
+  }
 
   // Countdown overlay — shown while in win zone
   if (state.outcome === 'playing' && state.stableTimer > 0) {
@@ -762,13 +881,24 @@ function drawHUD(moon) {
     ctx.lineWidth = 1.5;
     rrect(bx2, by2, bw, bh, 18); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = '800 28px Inter,ui-sans-serif,sans-serif';
-    ctx.fillStyle = okCol;
-    ctx.fillText(state.outcome==='win' ? '\uD83C\uDF15  MISSION COMPLETE' : '\uD83D\uDCA5  MISSION FAILED',
-                 W/2, H/2+4);
-    ctx.font = '14px Inter,ui-sans-serif,sans-serif';
-    ctx.fillStyle = '#93afd4';
-    ctx.fillText('Press R to restart', W/2, H/2+30);
+    if (state.outcome === 'win') {
+      ctx.font = '800 28px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle = okCol;
+      ctx.fillText('\uD83C\uDF15  MISSION COMPLETE', W/2, H/2 + 4);
+      ctx.font = '14px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle = '#93afd4';
+      ctx.fillText('Press R to restart', W/2, H/2 + 30);
+    } else {
+      ctx.font = '800 26px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle = okCol;
+      ctx.fillText('\uD83D\uDCA5  MISSION FAILED', W/2, H/2 - 12);
+      ctx.font = '700 18px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle = 'rgba(252,165,165,0.8)';
+      ctx.fillText(state.message, W/2, H/2 + 16);
+      ctx.font = '14px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle = '#93afd4';
+      ctx.fillText('Press R to restart', W/2, H/2 + 40);
+    }
     ctx.textAlign = 'left';
     ctx.restore();
   }
