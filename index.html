@@ -2,25 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Moonshot</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="game-shell">
-    <canvas id="game" width="2400" height="1600"></canvas>
-    <!-- Controls legend top-right; pointer-events:none so keys still reach canvas -->
-    <div class="overlay">
-      <div class="title">MOONSHOT</div>
-      <div class="subtitle">Reach stable lunar orbit</div>
-      <div class="controls">
-        <span>A / D &nbsp;Rotate</span>
-        <span>W / ↑ / Space &nbsp;Thrust</span>
-        <span>1–4 &nbsp;Time Warp</span>
-        <span>R &nbsp;Restart</span>
+  <button class="fullscreen-btn" id="btn-fullscreen" aria-label="Fullscreen">⛶</button>
+  <div class="game-row">
+
+    <!-- LEFT: rotate left -->
+    <div class="side-ctrl left-ctrl">
+      <button class="orient-btn" id="btn-prograde"  aria-label="Prograde">PRO</button>
+      <button class="move-btn rotate-btn" id="btn-left" aria-label="Rotate left">◁</button>
+      <button class="orient-btn" id="btn-retrograde" aria-label="Retrograde">RETRO</button>
+    </div>
+
+    <!-- CENTRE: canvas + overlay -->
+    <div class="game-shell">
+      <canvas id="game" width="2400" height="1600"></canvas>
+      <div class="overlay">
+        <div class="title">MOONSHOT</div>
+        <div class="subtitle">Reach stable lunar orbit</div>
+        <div class="controls kb-only">
+          <span>A / D &nbsp;Rotate</span>
+          <span>W / Space &nbsp;Thrust</span>
+          <span>1–4 &nbsp;Time Warp</span>
+          <span>R &nbsp;Restart</span>
+        </div>
       </div>
     </div>
+
+    <!-- RIGHT: thrust (top) + rotate right (bottom) -->
+    <div class="side-ctrl right-ctrl">
+      <button class="move-btn thrust-btn" id="btn-thrust" aria-label="Thrust">▲<br><span>THRUST</span></button>
+      <button class="move-btn rotate-btn" id="btn-right" aria-label="Rotate right">▷</button>
+    </div>
+
   </div>
+
+  <!-- BOTTOM BAR: warp + restart -->
+  <div class="bottom-bar">
+    <div class="warp-btns">
+      <button class="warp-btn active" id="btn-warp-1">1×</button>
+      <button class="warp-btn"        id="btn-warp-2">2×</button>
+      <button class="warp-btn"        id="btn-warp-3">3×</button>
+      <button class="warp-btn"        id="btn-warp-4">5×</button>
+    </div>
+    <button class="restart-btn" id="btn-restart">↺ Restart</button>
+  </div>
+
   <script src="game.js"></script>
 </body>
 </html>
