@@ -173,18 +173,20 @@ canvas {
 
 /* ── Desktop: hide touch controls, full canvas ── */
 @media (hover: hover) and (pointer: fine) {
-  .side-ctrl   { display: none; }
+  /* Keep side panels but hide the touch-only move buttons */
+  .move-btn    { display: none; }
   .bottom-bar  { display: none; }
   :root        { --bottom-h: 0px; }
   .game-shell  { padding: 4px; }
   canvas       { max-height: 100vh; border-radius: 18px; }
   .kb-only     { display: flex; }
+  /* Shrink side panels to just fit the orient buttons */
+  .side-ctrl   { width: 64px; justify-content: center; gap: 8px; }
+  /* Add keyboard hint to orient buttons via title tooltip */
+  .orient-btn  { cursor: pointer; }
 }
 
-/* Hide keyboard hint on touch devices */
-@media (hover: none) {
-  .kb-only { display: none; }
-}
+
 
 /* ── Fullscreen button ── */
 .fullscreen-btn {

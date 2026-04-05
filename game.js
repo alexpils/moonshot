@@ -44,7 +44,19 @@ window.addEventListener('keydown', e => {
   const block = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'];
   if (block.includes(e.code)) e.preventDefault();
   keys.add(e.code);
-  if (e.code === 'KeyR')   { resetGame(); return; }
+  if (e.code === 'KeyR') { resetGame(); return; }
+  if (e.code === 'KeyE') {
+    state.orientMode = state.orientMode === 'prograde' ? null : 'prograde';
+    document.getElementById('btn-prograde') ?.classList.toggle('pressed', state.orientMode === 'prograde');
+    document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
+    return;
+  }
+  if (e.code === 'KeyQ') {
+    state.orientMode = state.orientMode === 'retrograde' ? null : 'retrograde';
+    document.getElementById('btn-retrograde')?.classList.toggle('pressed', state.orientMode === 'retrograde');
+    document.getElementById('btn-prograde') ?.classList.toggle('pressed', false);
+    return;
+  }
   if (e.code === 'Digit1') state.warpIdx = 0;
   if (e.code === 'Digit2') state.warpIdx = 1;
   if (e.code === 'Digit3') state.warpIdx = 2;
@@ -245,7 +257,7 @@ function evalState(dEarth, dMoon, realDt) {
     state.stableTimer += realDt;
     const rem = Math.max(0, STABLE_HOLD - state.stableTimer);
     state.message = rem > 0
-      ? 'HOLD DISTANCE < 100u FOR ' + rem.toFixed(1) + 's'
+      ? 'HOLDING LUNAR ORBIT…'
       : 'STABLE LUNAR ORBIT ACHIEVED!';
     if (state.stableTimer >= STABLE_HOLD) end('win', 'MISSION COMPLETE');
   } else {
@@ -701,6 +713,45 @@ function drawHUD(moon) {
   ].forEach((t,i) => ctx.fillText(t, px+18, py+104+i*18));
   ctx.restore();
 
+  // Countdown overlay — shown while in win zone
+  if (state.outcome === 'playing' && state.stableTimer > 0) {
+    const rem    = Math.max(0, STABLE_HOLD - state.stableTimer);
+    const prog   = state.stableTimer / STABLE_HOLD;
+    const cx     = W / 2, cy = H / 2;
+    const radius = 110;
+    const pulse  = 0.85 + 0.15 * Math.sin(Date.now() / 300);
+
+    ctx.save();
+
+    // Arc background
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI/2, -Math.PI/2 + Math.PI*2, false);
+    ctx.strokeStyle = 'rgba(134,239,172,0.12)';
+    ctx.lineWidth = 14;
+    ctx.stroke();
+
+    // Progress arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI/2, -Math.PI/2 + Math.PI*2*prog, false);
+    ctx.strokeStyle = `rgba(134,239,172,${(0.7 * pulse).toFixed(2)})`;
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Centre text
+    ctx.textAlign = 'center';
+    ctx.font = '800 72px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = `rgba(134,239,172,${pulse.toFixed(2)})`;
+    ctx.fillText(rem > 0 ? Math.ceil(rem) : '✓', cx, cy + 24);
+
+    ctx.font = '700 18px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = 'rgba(134,239,172,0.6)';
+    ctx.fillText('HOLD ORBIT', cx, cy + 60);
+
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   // Win / lose banner
   if (state.outcome !== 'playing') {
     const bw=390, bh=96, bx2=W/2-195, by2=H/2-48;
@@ -866,6 +917,12 @@ function loop(now) {
   document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
   document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
 })();
+
+// Hide overlay on touch devices (CSS media queries are unreliable on mobile)
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  const ov = document.querySelector('.overlay');
+  if (ov) ov.style.display = 'none';
+}
 
 resetGame();
 // Sync orient button highlight to initial state
