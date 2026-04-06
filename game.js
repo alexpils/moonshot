@@ -30,6 +30,11 @@ const PAD_HALF       = 0.30;
 const PAD_ANGLE      = Math.PI / 2;
 const LAND_ESCAPE    = 960;
 
+const M3_ORBIT_MIN  = 360;
+const M3_ORBIT_MAX  = 500;
+const M3_HOLD       = 30;
+const M3_THRUST     = 110;
+
 const canvas = document.getElementById('game');
 const ctx    = canvas.getContext('2d');
 const W  = canvas.width;
@@ -70,7 +75,7 @@ const LAND_CRATERS = [
 // SCENE MANAGEMENT
 // ════════════════════════════════════════════════════════════════════════════
 
-let scene = 'title'; // 'title' | 'orbit' | 'landing'
+let scene = 'title'; // 'title' | 'orbit' | 'landing' | 'm3'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 
@@ -115,7 +120,9 @@ const transition = {
 
 const progress = {
   get mission1Beaten() { return localStorage.getItem('moonshot_m1') === '1'; },
+  get mission2Beaten() { return localStorage.getItem('moonshot_m2') === '1'; },
   unlockMission1()     { localStorage.setItem('moonshot_m1', '1'); },
+  unlockMission2()     { localStorage.setItem('moonshot_m2', '1'); },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -132,9 +139,10 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR') {
     if (scene === 'orbit')   { resetGame(); return; }
     if (scene === 'landing') { resetLanding(orbitHandoff); return; }
+    if (scene === 'm3')      { resetM3(); return; }
   }
 
-  const tOrient = scene === 'orbit' ? state : (scene === 'landing' ? lState : null);
+  const tOrient = scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null));
   if (!tOrient) return;
 
   if (e.code === 'KeyE') {
@@ -173,6 +181,7 @@ function handleCanvasClick(e) {
   if (scene === 'title') {
     if (hit(uiHitBoxes.mission1)) { scene = 'orbit'; resetGame(); }
     if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
+    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; resetM3(); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -210,6 +219,10 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.retryLanding)) resetLanding(orbitHandoff);
     if (hit(uiHitBoxes.backToTitle))  scene = 'title';
   }
+  if (scene === 'm3') {
+    if (hit(uiHitBoxes.retryM3))    resetM3();
+    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+  }
 }
 
 
@@ -219,6 +232,7 @@ function handleCanvasClick(e) {
 
 let state, rocket;
 let lState, lRocket;
+let m3State, m3Rocket;
 
 const pathLengthFilter = {
   len: 140,
@@ -321,6 +335,29 @@ function resetLanding(handoff) {
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
 }
 
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// M3 RESET
+// ════════════════════════════════════════════════════════════════════════════
+
+function resetM3() {
+  collisionFilter.reset(); pathLengthFilter.reset();
+  uiHitBoxes.retryM3 = null; uiHitBoxes.backToTitle = null;
+  const padX = CX + Math.cos(PAD_ANGLE) * LAND_MOON_R;
+  const padY = CY + Math.sin(PAD_ANGLE) * LAND_MOON_R;
+  m3State = {
+    warpIdx: 0, orientMode: null, outcome: 'playing',
+    message: 'LAUNCH FROM THE MOON \u2014 ESTABLISH ORBIT',
+    trail: [], stableTimer: 0,
+  };
+  m3Rocket = {
+    x: padX, y: padY, vx: 0, vy: 0,
+    angle: PAD_ANGLE - Math.PI / 2, fuel: 100,
+  };
+  document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
+  document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -519,6 +556,109 @@ function evalLandingState(distToMoon) {
 
 function endLanding(outcome,msg) { lState.outcome=outcome; lState.message=msg; }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PHYSICS + EVAL – M3
+// ════════════════════════════════════════════════════════════════════════════
+
+function updateM3Physics(realDt) {
+  const warp=WARP_LEVELS[m3State.warpIdx], simDt=realDt*TIME_SCALE*warp, NSUB=warp*2, dt=simDt/NSUB;
+  const left=keys.has('ArrowLeft')||keys.has('KeyA');
+  const right=keys.has('ArrowRight')||keys.has('KeyD');
+  const thrusting=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m3Rocket.fuel>0;
+
+  if (left||right) m3State.orientMode=null;
+  if (left)  m3Rocket.angle-=ROT_SPEED*realDt*warp;
+  if (right) m3Rocket.angle+=ROT_SPEED*realDt*warp;
+
+  if (m3State.orientMode&&!left&&!right) {
+    const pro=Math.atan2(m3Rocket.vy,m3Rocket.vx);
+    const tgt=m3State.orientMode==='prograde'?pro:pro+Math.PI;
+    let d=((tgt-m3Rocket.angle+Math.PI*3)%(Math.PI*2))-Math.PI;
+    const step=ROT_SPEED*1.5*realDt;
+    if (Math.abs(d)<step) m3Rocket.angle=tgt; else m3Rocket.angle+=Math.sign(d)*step;
+  }
+
+  for (let s=0;s<NSUB;s++) {
+    if (m3State.outcome!=='playing') break;
+    if (thrusting) {
+      m3Rocket.vx+=Math.cos(m3Rocket.angle)*M3_THRUST*dt;
+      m3Rocket.vy+=Math.sin(m3Rocket.angle)*M3_THRUST*dt;
+      m3Rocket.fuel=Math.max(0,m3Rocket.fuel-FUEL_DRAIN*(M3_THRUST/THRUST)*dt);
+    }
+    const gM=gravAccel(CX,CY,MOON_MASS,m3Rocket.x,m3Rocket.y);
+    m3Rocket.vx+=gM.ax*dt; m3Rocket.vy+=gM.ay*dt;
+    m3Rocket.x+=m3Rocket.vx*dt; m3Rocket.y+=m3Rocket.vy*dt;
+    const last=m3State.trail[m3State.trail.length-1];
+    if (!last||Math.hypot(m3Rocket.x-last.x,m3Rocket.y-last.y)>3) {
+      m3State.trail.push({x:m3Rocket.x,y:m3Rocket.y});
+      if (m3State.trail.length>TRAIL_MAX) m3State.trail.shift();
+    }
+    evalM3State(gM.dist, realDt/NSUB);
+  }
+}
+
+function evalM3State(dist, dt) {
+  if (dist<LAND_MOON_R+4) return endM3('lose','CRASHED INTO THE MOON');
+  if (dist>LAND_ESCAPE)   return endM3('lose','LOST IN SPACE');
+  if (m3Rocket.fuel<=0&&(dist<M3_ORBIT_MIN||dist>M3_ORBIT_MAX)) return endM3('lose','OUT OF FUEL');
+
+  const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
+  if (inBand) {
+    m3State.stableTimer+=dt*WARP_LEVELS[m3State.warpIdx]*TIME_SCALE;
+    const rem=Math.max(0,M3_HOLD-m3State.stableTimer);
+    m3State.message=rem>0?'HOLDING ORBIT\u2026':'ORBIT ESTABLISHED!';
+    if (m3State.stableTimer>=M3_HOLD) {
+      endM3('win','MISSION COMPLETE');
+      progress.unlockMission2();
+      transition.start(()=>{
+        scene='orbit';
+        resetGame();
+        // Place rocket near Moon in a stable orbit
+        const moon=moonXY(state.moonAngle);
+        const midR=(M3_ORBIT_MIN+M3_ORBIT_MAX)/2;
+        const spA=-Math.PI/2;
+        const vC=Math.sqrt(G*MOON_MASS/midR);
+        const moonVx=-Math.sin(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
+        const moonVy= Math.cos(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
+        rocket.x=moon.x+Math.cos(spA)*midR;
+        rocket.y=moon.y+Math.sin(spA)*midR;
+        rocket.vx=-Math.sin(spA)*vC+moonVx;
+        rocket.vy= Math.cos(spA)*vC+moonVy;
+        rocket.fuel=m3Rocket.fuel;
+        rocket.angle=spA+Math.PI/2;
+        state.message='IN LUNAR ORBIT \u2014 BURN RETROGRADE TO RETURN HOME';
+      });
+    }
+  } else {
+    m3State.stableTimer=0;
+    const alt=dist-LAND_MOON_R;
+    if (alt<60)               m3State.message='LAUNCH \u2014 CLIMB TO ORBIT';
+    else if (dist<M3_ORBIT_MIN) m3State.message='BELOW TARGET BAND \u2014 BURN PROGRADE';
+    else                      m3State.message='ABOVE TARGET BAND \u2014 BURN RETROGRADE';
+  }
+}
+
+function endM3(outcome,msg) { m3State.outcome=outcome; m3State.message=msg; }
+
+function predictM3Path() {
+  let px=m3Rocket.x,py=m3Rocket.y,pvx=m3Rocket.vx,pvy=m3Rocket.vy;
+  const pts=[]; let col=null; const STEPS=200, subDt=PRED_DT/PRED_SUBSTEPS;
+  for (let i=0;i<STEPS;i++) {
+    let hit=false;
+    for (let s=0;s<PRED_SUBSTEPS;s++) {
+      const prevX=px,prevY=py;
+      const gM=gravAccel(CX,CY,MOON_MASS,px,py);
+      pvx+=gM.ax*subDt; pvy+=gM.ay*subDt; px+=pvx*subDt; py+=pvy*subDt;
+      if (gM.dist<LAND_MOON_R) { const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R); col={x:sp.x,y:sp.y,body:'MOON'}; pts.push(sp); hit=true; break; }
+      if (gM.dist>LAND_ESCAPE||gM.dist<2) { hit=true; break; }
+    }
+    if (hit) break; pts.push({x:px,y:py});
+  }
+  return {pts,collision:col};
+}
+
+
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRAJECTORY PREDICTION
@@ -671,8 +811,12 @@ function renderTitle() {
     ctx.restore();
   }
 
-  drawCard('mission1',card1X,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
-  drawCard('mission2',card2X,cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  const cardW3=cardW, card3X=card2X+cardW+gap;
+  // Widen layout to 3 cards — shift all left
+  const shift=(cardW+gap);
+  drawCard('mission1',card1X-shift/2,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
+  drawCard('mission2',(card2X-shift/2),cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  drawCard('mission3',(card3X-shift/2),cardY,cardW3,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',progress.mission2Beaten?'Launch and establish Moon orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
@@ -1011,6 +1155,124 @@ function drawLandingOutcomeBanner() {
 // MAIN LOOP
 // ════════════════════════════════════════════════════════════════════════════
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// RENDER + HUD – M3
+// ════════════════════════════════════════════════════════════════════════════
+
+function renderM3() {
+  ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.setLineDash([]);
+  ctx.fillStyle='#020610'; ctx.fillRect(0,0,W,H);
+  for (const s of STARS) { ctx.globalAlpha=s.a*0.7; ctx.fillStyle='#dbeafe'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
+  ctx.globalAlpha=1;
+
+  // Moon
+  { const mg=ctx.createRadialGradient(CX,CY,LAND_MOON_R*0.9,CX,CY,LAND_MOON_R*1.25);
+    mg.addColorStop(0,'rgba(180,180,160,0.18)'); mg.addColorStop(1,'rgba(180,180,160,0)');
+    ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(CX,CY,LAND_MOON_R*1.25,0,Math.PI*2); ctx.fill();
+    const ms=ctx.createRadialGradient(CX-LAND_MOON_R*0.3,CY-LAND_MOON_R*0.3,LAND_MOON_R*0.1,CX,CY,LAND_MOON_R);
+    ms.addColorStop(0,'#c4c6cc'); ms.addColorStop(0.5,'#9ca3af'); ms.addColorStop(1,'#6b7280');
+    ctx.fillStyle=ms; ctx.beginPath(); ctx.arc(CX,CY,LAND_MOON_R,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(CX,CY,LAND_MOON_R,0,Math.PI*2); ctx.clip();
+    for (const c of LAND_CRATERS) {
+      const cx2=CX+c.ax*LAND_MOON_R, cy2=CY+c.ay*LAND_MOON_R;
+      ctx.fillStyle=`rgba(80,84,92,${c.depth*0.7})`; ctx.beginPath(); ctx.arc(cx2,cy2,c.r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=`rgba(200,205,215,${c.depth*0.4})`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(cx2-c.r*0.15,cy2-c.r*0.15,c.r,Math.PI,Math.PI*1.8); ctx.stroke();
+    }
+    ctx.restore();
+    drawShadow(CX,CY,LAND_MOON_R,-1200,CY);
+    ctx.strokeStyle='rgba(220,224,230,0.35)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(CX,CY,LAND_MOON_R+1,0,Math.PI*2); ctx.stroke(); }
+
+  // Launch pad marker (dim reminder)
+  { const t=(Date.now()/600)%(Math.PI*2), pulse=0.4+0.2*Math.sin(t);
+    ctx.strokeStyle=`rgba(251,191,36,${pulse.toFixed(2)})`; ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.arc(CX,CY,LAND_MOON_R,PAD_ANGLE-PAD_HALF,PAD_ANGLE+PAD_HALF); ctx.stroke();
+    ctx.lineCap='butt'; }
+
+  // Target orbit band
+  { const dist=Math.hypot(m3Rocket.x-CX,m3Rocket.y-CY);
+    const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
+    const t=(Date.now()/800)%(Math.PI*2), pulse=0.5+0.3*Math.sin(t);
+    ctx.save(); ctx.setLineDash([8,12]);
+    const ba=inBand?(0.75+0.2*pulse).toFixed(2):(0.2+0.08*pulse).toFixed(2);
+    ctx.strokeStyle=`rgba(134,239,172,${ba})`; ctx.lineWidth=inBand?2.5:1.5;
+    ctx.beginPath(); ctx.arc(CX,CY,M3_ORBIT_MIN,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CX,CY,M3_ORBIT_MAX,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(CX,CY,M3_ORBIT_MAX,0,Math.PI*2,false); ctx.arc(CX,CY,M3_ORBIT_MIN,0,Math.PI*2,true);
+    ctx.fillStyle=inBand?'rgba(134,239,172,0.07)':'rgba(134,239,172,0.02)'; ctx.fill();
+    ctx.restore(); }
+
+  // Prediction + trail + rocket
+  if (m3State.outcome==='playing') {
+    const pred=predictM3Path(), pts=pred.pts;
+    const sc=collisionFilter.update(pred.collision), dispPts=pts.slice(0,pathLengthFilter.update(pts.length));
+    if (sc) { const sp=Math.max(0,dispPts.length-20); strokePath(dispPts.slice(0,sp),'rgba(251,211,77,0.45)',1.3,[6,6]); strokePath(dispPts.slice(sp),'rgba(255,80,80,0.75)',2.0,[]); drawCollisionWarning(sc); }
+    else strokePath(dispPts,'rgba(251,211,77,0.45)',1.3,[6,6]);
+  }
+  strokePath(m3State.trail,'rgba(125,211,252,0.4)',1.5,[]);
+  const thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m3Rocket.fuel>0&&m3State.outcome==='playing';
+  drawRocket(m3Rocket.x,m3Rocket.y,m3Rocket.angle,thr);
+  drawM3HUD();
+}
+
+function drawM3HUD() {
+  const speed=Math.hypot(m3Rocket.vx,m3Rocket.vy);
+  const dist=Math.hypot(m3Rocket.x-CX,m3Rocket.y-CY);
+  const alt=Math.max(0,dist-LAND_MOON_R);
+  const fuelPct=Math.max(0,Math.min(1,m3Rocket.fuel/100));
+  const warp=WARP_LEVELS[m3State.warpIdx];
+  const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
+
+  if (m3State.outcome==='playing') drawStatusBar(m3State.message);
+  drawFuelBar(fuelPct,m3Rocket.fuel);
+  drawSpeedGauge(speed,400);
+
+  // Hold countdown ring
+  if (m3State.outcome==='playing'&&m3State.stableTimer>0) {
+    const rem=Math.max(0,M3_HOLD-m3State.stableTimer), prog=m3State.stableTimer/M3_HOLD;
+    const cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2); ctx.strokeStyle='rgba(134,239,172,0.12)'; ctx.lineWidth=14; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog); ctx.strokeStyle=`rgba(134,239,172,${(0.7*pulse).toFixed(2)})`; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
+    ctx.textAlign='center';
+    ctx.font='800 72px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=`rgba(134,239,172,${pulse.toFixed(2)})`; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
+    ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.6)'; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
+    ctx.textAlign='left'; ctx.restore();
+  }
+
+  // Pills
+  { const altC=alt<80?'#f87171':alt<200?'#fbbf24':'#38bdf8';
+    const distC=inBand?'#4ade80':(dist<M3_ORBIT_MIN?'#f87171':'#fbbf24');
+    const items=[{label:'ALT',value:alt.toFixed(0)+' u',color:altC},{label:'ORBIT R',value:dist.toFixed(0)+' u',color:distC},{label:'WARP',value:warp+'\u00d7',color:'#ccddf8'}];
+    const pw=130,ph=44,gap=10,sx=230,sy=H-80;
+    ctx.save();
+    items.forEach((item,i)=>{ const x=sx+i*(pw+gap),y=sy;
+      ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1; rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
+      ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
+    }); ctx.restore(); }
+
+  drawM3OutcomeBanner();
+}
+
+function drawM3OutcomeBanner() {
+  if (m3State.outcome==='playing'||m3State.outcome==='win') return;
+  const bw=500, bh=170, bx=W/2-bw/2, by=H/2-bh/2;
+  ctx.save();
+  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle='rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
+  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
+  ctx.textAlign='center';
+  ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='#fca5a5'; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
+  ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(m3State.message,W/2,by+86);
+  ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
+  drawCanvasBtn('retryM3','\u21ba Retry',W/2-166,by+bh-58,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
+  drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
+  ctx.textAlign='left'; ctx.restore();
+}
+
+
 let lastNow = null;
 
 function loop(now) {
@@ -1025,11 +1287,13 @@ function loop(now) {
     camera.zoom = 1.0+1.2*camera.blend;
   }
   if (scene==='landing' && lState.outcome==='playing') updateLandingPhysics(realDt);
+  if (scene==='m3' && m3State.outcome==='playing') updateM3Physics(realDt);
   transition.update(realDt);
 
-  if (scene==='title')   renderTitle();
+  if (scene==='title')        renderTitle();
   else if (scene==='orbit')   render();
   else if (scene==='landing') renderLanding();
+  else if (scene==='m3')      renderM3();
   transition.draw();
 
   requestAnimationFrame(loop);
@@ -1060,7 +1324,7 @@ function loop(now) {
 
 (function initOrientButtons() {
   function setMode(mode) {
-    const tgt=scene==='landing'?lState:state;
+    const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
     if (!tgt) return;
     tgt.orientMode=tgt.orientMode===mode?null:mode;
     document.getElementById('btn-prograde')?.classList.toggle('pressed',tgt.orientMode==='prograde');
@@ -1081,7 +1345,7 @@ function loop(now) {
     el.addEventListener('pointerdown',e=>{
       e.preventDefault();
       if (id==='btn-left'||id==='btn-right') {
-        const tgt=scene==='landing'?lState:state;
+        const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
         if (tgt) { tgt.orientMode=null; document.getElementById('btn-prograde')?.classList.remove('pressed'); document.getElementById('btn-retrograde')?.classList.remove('pressed'); }
       }
       setP(true);
@@ -1094,7 +1358,7 @@ function loop(now) {
   document.querySelectorAll('.warp-btn').forEach((btn,i)=>{
     btn.addEventListener('pointerdown',e=>{
       e.preventDefault();
-      const tgt=scene==='landing'?lState:state;
+      const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
       if (tgt) tgt.warpIdx=i;
       document.querySelectorAll('.warp-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
     },{passive:false});
@@ -1106,7 +1370,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff);},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3();},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
@@ -1125,5 +1389,7 @@ state  = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', 
 lState = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], fromOrbit: false };
 rocket  = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 lRocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
+m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0 };
+m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 
 requestAnimationFrame(loop);
