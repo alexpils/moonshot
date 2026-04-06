@@ -890,13 +890,17 @@ function drawLandingHUD() {
   // Speed gauge (same as orbit)
   drawSpeedGauge(speed);
 
-  // Landing-specific telemetry pills
+  // Vertical speed: radial component toward Moon surface (positive = descending)
+  const surfNx=(lRocket.x-CX)/Math.max(distToMoon,1);
+  const surfNy=(lRocket.y-CY)/Math.max(distToMoon,1);
+  const descentRate=-(lRocket.vx*surfNx+lRocket.vy*surfNy);
+
+  // Landing-specific telemetry pills (speed pill removed — gauge covers it)
   { const altColor=alt<80?'#f87171':alt<200?'#fbbf24':'#38bdf8';
-    const spdColor=speed<LAND_SPEED_MAX?'#4ade80':speed<LAND_SPEED_MAX*2?'#fbbf24':'#f87171';
+    const vsColor=descentRate>80?'#f87171':descentRate>20?'#fbbf24':'#4ade80';
     const items=[
       {label:'ALT',value:alt.toFixed(0)+' u',color:altColor},
-      {label:'SPEED',value:speed.toFixed(0)+' u/s',color:spdColor},
-      {label:'SAFE <',value:LAND_SPEED_MAX+' u/s',color:'rgba(150,200,150,0.7)'},
+      {label:'V-SPEED',value:(descentRate>=0?'\u25bc ':' \u25b2 ')+Math.abs(descentRate).toFixed(0),color:vsColor},
       {label:'WARP',value:warp+'\u00d7',color:'#ccddf8'},
     ];
     const pw=130,ph=44,gap=10,sx=230,sy=H-80;
