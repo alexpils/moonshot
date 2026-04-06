@@ -34,7 +34,7 @@ const LAND_ESCAPE    = 960;
 // Mission 0 — Launch to orbit
 const M0_EARTH_R    = 24000;
 const M0_GM         = 57.6e9;
-const M0_DRAG_CD    = 500;
+const M0_DRAG_CD    = 40;
 const M0_ATMO_SCALE = 700;
 const M0_ORBIT_MIN  = 550;
 const M0_ORBIT_MAX  = 950;
@@ -1498,7 +1498,7 @@ function resetM0() {
     stage1: null, // falling stage object {x,y,vx,vy}
     launched: false,
   };
-  m0Rocket = { x: CX, y: H-30, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
+  m0Rocket = { x: CX, y: H-35, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
   document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
 }
@@ -1607,7 +1607,7 @@ function m0AltRocket() {
 
 function evalM0State(alt) {
   if (!m0State.launched) return;
-  if (alt<0) return endM0('lose','CRASHED INTO EARTH');
+  if (alt<-5) return endM0('lose','CRASHED INTO EARTH');
   if (alt>M0_ORBIT_MAX+500&&m0Rocket.fuel<=0) return endM0('lose','OUT OF FUEL');
   if (m0Rocket.y<-200) return endM0('lose','LOST IN SPACE');
 }
@@ -1671,37 +1671,37 @@ function renderM0() {
 function drawM0Rocket() {
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
   ctx.save(); ctx.translate(m0Rocket.x,m0Rocket.y); ctx.rotate(m0Rocket.angle);
-  // Local axes: +x = nose direction (up when angle=-PI/2), -x = tail (down = toward Earth)
+  // After rotation by angle=-PI/2:
+  //   local +x  = canvas LEFT  (nose points up = -canvas y, achieved by +local x after -PI/2 rot)
+  //   Actually: rotate(-PI/2) maps: canvas +x -> local -y, canvas +y -> local +x
+  //   So local +x = canvas DOWN (toward Earth), local -x = canvas UP (away from Earth)
+  // Nose = away from Earth = local -x direction. Tail = local +x direction.
 
-  // Stage 1 body — drawn below the upper stage (in -x / tail direction)
+  // Upper stage — nose at local -x (top), body from x=6 to x=-6, nose spike at x=-16
+  ctx.fillStyle='#f1f5f9';
+  ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(6,-5); ctx.lineTo(6,5); ctx.closePath(); ctx.fill();
+
+  // Stage 1 body — below upper stage = local +x direction (toward Earth)
   if (m0State.stage===1) {
     ctx.fillStyle='#64748b';
-    ctx.fillRect(-32,-5,26,10);   // stage 1 cylinder (tail-side)
-    ctx.fillStyle='#94a3b8';
-    ctx.fillRect(-6,-4,6,8);      // interstage adapter
-    // S1 nozzle bell
+    ctx.fillRect(6,-5,28,10);     // stage 1 cylinder
     ctx.fillStyle='#475569';
-    ctx.beginPath(); ctx.moveTo(-32,-5); ctx.lineTo(-38,-7); ctx.lineTo(-38,7); ctx.lineTo(-32,5); ctx.closePath(); ctx.fill();
+    // S1 nozzle bell (wider at far end)
+    ctx.beginPath(); ctx.moveTo(34,-5); ctx.lineTo(42,-8); ctx.lineTo(42,8); ctx.lineTo(34,5); ctx.closePath(); ctx.fill();
+    // interstage ring
+    ctx.fillStyle='#94a3b8'; ctx.fillRect(4,-6,4,12);
   }
 
-  // Exhaust — shoots out the tail (-x direction)
+  // Exhaust flame — shoots out local +x (toward Earth = downward when vertical)
   if (thr) {
-    // Upper stage exhaust
+    var fl=20+Math.random()*14;
+    // Upper stage engine exhaust
+    var x0=m0State.stage===1?42:6;
     ctx.fillStyle='rgba(251,146,60,'+(0.7+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(-6,3); ctx.lineTo(-6,-3); ctx.lineTo(-22-Math.random()*12,0); ctx.closePath(); ctx.fill();
-    // Stage 1 extra exhaust (bigger)
-    if (m0State.stage===1) {
-      ctx.fillStyle='rgba(253,186,116,'+(0.6+Math.random()*0.3)+')';
-      ctx.beginPath(); ctx.moveTo(-38,6); ctx.lineTo(-38,-6); ctx.lineTo(-60-Math.random()*20,0); ctx.closePath(); ctx.fill();
-    }
+    ctx.beginPath(); ctx.moveTo(x0,-4); ctx.lineTo(x0+fl,0); ctx.lineTo(x0,4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(253,224,71,'+(0.5+Math.random()*0.3)+')';
+    ctx.beginPath(); ctx.moveTo(x0,-2); ctx.lineTo(x0+fl*0.5,0); ctx.lineTo(x0,2); ctx.closePath(); ctx.fill();
   }
-
-  // Upper stage capsule (nose direction = +x)
-  ctx.fillStyle='#f1f5f9';
-  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-4,-6); ctx.lineTo(-4,6); ctx.closePath(); ctx.fill();
-  // Capsule nose cone highlight
-  ctx.fillStyle='rgba(255,255,255,0.4)';
-  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-2,-2); ctx.lineTo(-2,0); ctx.closePath(); ctx.fill();
 
   ctx.restore();
 }
@@ -1898,7 +1898,7 @@ lState = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', 
 rocket  = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 lRocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 m0State = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, stage: 1, stage1: null };
-m0Rocket = { x: CX, y: H-30, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
+m0Rocket = { x: CX, y: H-35, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
 m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0 };
 m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0 };
