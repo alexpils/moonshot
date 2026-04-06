@@ -33,7 +33,6 @@ const LAND_ESCAPE    = 960;
 
 // Mission 0 — Launch to orbit
 const M0_EARTH_R    = 24000;
-const M0_EARTH_CY   = H + M0_EARTH_R - 30;
 const M0_GM         = 57.6e9;
 const M0_DRAG_CD    = 500;
 const M0_ATMO_SCALE = 700;
@@ -1538,7 +1537,7 @@ function updateM0Physics(realDt) {
     }
 
     // Gravity toward Earth center below canvas
-    var dx=CX-m0Rocket.x, dy=M0_EARTH_CY-m0Rocket.y;
+    var dx=CX-m0Rocket.x, dy=(H + M0_EARTH_R - 30)-m0Rocket.y;
     var dist2=dx*dx+dy*dy, dist=Math.sqrt(dist2);
     var gA=M0_GM/Math.max(dist2,1e6);
     m0Rocket.vx+=(dx/dist)*gA*dt; m0Rocket.vy+=(dy/dist)*gA*dt;
@@ -1558,7 +1557,7 @@ function updateM0Physics(realDt) {
     if (m0State.stage1) {
       m0State.stage1.x+=m0State.stage1.vx*dt;
       m0State.stage1.y+=m0State.stage1.vy*dt;
-      var sdx=CX-m0State.stage1.x,sdy=M0_EARTH_CY-m0State.stage1.y;
+      var sdx=CX-m0State.stage1.x,sdy=(H + M0_EARTH_R - 30)-m0State.stage1.y;
       var sd2=sdx*sdx+sdy*sdy,sd=Math.sqrt(sd2);
       m0State.stage1.vx+=(sdx/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
       m0State.stage1.vy+=(sdy/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
@@ -1597,7 +1596,7 @@ function updateM0Physics(realDt) {
 }
 
 function m0AltRocket() {
-  var dy=M0_EARTH_CY-m0Rocket.y, dx=CX-m0Rocket.x;
+  var dy=(H + M0_EARTH_R - 30)-m0Rocket.y, dx=CX-m0Rocket.x;
   return Math.hypot(dx,dy)-M0_EARTH_R;
 }
 
@@ -1623,7 +1622,7 @@ function renderM0() {
   ctx.globalAlpha=1;
 
   // Earth arc at bottom
-  var eCY=M0_EARTH_CY;
+  var eCY=(H + M0_EARTH_R - 30);
   // Earth glow
   var eg=ctx.createRadialGradient(CX,eCY,M0_EARTH_R*0.98,CX,eCY,M0_EARTH_R*1.04);
   eg.addColorStop(0,'rgba(59,130,246,0.25)'); eg.addColorStop(1,'rgba(59,130,246,0)');
