@@ -878,20 +878,22 @@ function drawLandingOutcomeBanner() {
   if (lState.outcome==='playing') return;
   const isWin=lState.outcome==='win';
   const okCol=isWin?'#86efac':'#fca5a5';
-  const bw=480, bh=isWin?130:110, bx=W/2-bw/2, by=H/2-bh/2;
+  const bw=500, bh=isWin?160:180, bx=W/2-bw/2, by=H/2-bh/2;
   ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.94)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
+  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
   rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
   ctx.textAlign='center';
   if (isWin) {
-    ctx.font='800 32px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF15  TOUCHDOWN!',W/2,by+46);
-    ctx.font='600 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('MISSION COMPLETE',W/2,by+78);
+    ctx.font='800 34px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF15  TOUCHDOWN!',W/2,by+52);
+    ctx.font='600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('MISSION COMPLETE',W/2,by+88);
   } else {
-    ctx.font='800 26px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+36);
-    ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(lState.message,W/2,by+64);
+    ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
+    ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(lState.message,W/2,by+86);
+    ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Aim for the landing zone below ' + LAND_SPEED_MAX + ' u/s',W/2,by+116);
   }
-  drawCanvasBtn('retryLanding','\u21ba Retry',W/2-160,by+bh-52,148,40,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
-  drawCanvasBtn('backToTitle','\u2190 Menu',W/2+12,by+bh-52,148,40,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
+  const btnY = by+bh-58;
+  drawCanvasBtn('retryLanding','\u21ba Retry',W/2-166,btnY,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
+  drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,btnY,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
   ctx.textAlign='left'; ctx.restore();
 }
 
