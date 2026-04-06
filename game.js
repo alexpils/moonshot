@@ -1675,7 +1675,7 @@ function drawM0Rocket() {
   // Translate to center of mass so rotation feels natural
   // Stage 1 attached: spans -42..+16 = 58u, CM at midpoint -13 → shift +13
   // Stage 2 only:     spans  -6..+16 = 22u, CM at midpoint  +5 → shift  -5
-  ctx.translate(m0State.stage===1 ? 13 : -5, 0);
+  ctx.translate(m0State.stage===1 ? 42 : 6, 0); // pivot at nozzle
 
   // Stage 1 body (tail direction = -x, toward Earth)
   if (m0State.stage===1) {
