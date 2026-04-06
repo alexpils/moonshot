@@ -78,6 +78,7 @@ const LAND_CRATERS = [
 let scene = 'title'; // 'title' | 'orbit' | 'landing' | 'm3'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
+let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
 
 // Fade transition state
 const transition = {
@@ -139,7 +140,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR') {
     if (scene === 'orbit')   { resetGame(); return; }
     if (scene === 'landing') { resetLanding(orbitHandoff); return; }
-    if (scene === 'm3')      { resetM3(); return; }
+    if (scene === 'm3')      { resetM3(m3EntryFuel); return; }
   }
 
   const tOrient = scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null));
@@ -181,7 +182,7 @@ function handleCanvasClick(e) {
   if (scene === 'title') {
     if (hit(uiHitBoxes.mission1)) { scene = 'orbit'; resetGame(); }
     if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
-    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; resetM3(); }
+    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -220,7 +221,7 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.backToTitle))  scene = 'title';
   }
   if (scene === 'm3') {
-    if (hit(uiHitBoxes.retryM3))    resetM3();
+    if (hit(uiHitBoxes.retryM3))    resetM3(m3EntryFuel);
     if (hit(uiHitBoxes.backToTitle)) scene = 'title';
   }
 }
@@ -549,6 +550,7 @@ function evalLandingState(distToMoon) {
       endLanding('win','TOUCHDOWN! MISSION COMPLETE');
       progress.unlockMission2();
       const _m3Fuel = lRocket.fuel;
+      m3EntryFuel = _m3Fuel;
       transition.start(()=>{ scene='m3'; resetM3(_m3Fuel); });
       return;
     }
@@ -1379,7 +1381,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3();},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel);},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
