@@ -40,7 +40,8 @@ const M0_ORBIT_MIN  = 550;
 const M0_ORBIT_MAX  = 950;
 const M0_HORIZ_MIN  = 0.78;
 const M0_HOLD       = 20;
-const M0_STAGE_SPLIT = 40;
+const M0_STAGE_SPLIT = 50;
+const M0_FUEL_DRAIN  = 8;
 const M0_THRUST     = 320;
 const M3_ORBIT_MIN  = 440;
 const M3_ORBIT_MAX  = 540;
@@ -1535,7 +1536,7 @@ function updateM0Physics(realDt) {
     if (thr) { m0State.launched=true;
       m0Rocket.vx+=Math.cos(m0Rocket.angle)*thrust*dt;
       m0Rocket.vy+=Math.sin(m0Rocket.angle)*thrust*dt;
-      m0Rocket.fuel=Math.max(0,m0Rocket.fuel-FUEL_DRAIN*(thrust/THRUST)*dt);
+      m0Rocket.fuel=Math.max(0,m0Rocket.fuel-M0_FUEL_DRAIN*(thrust/THRUST)*dt);
     }
 
     // Skip all physics until first thrust
