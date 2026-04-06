@@ -33,16 +33,16 @@ const LAND_ESCAPE    = 960;
 
 // Mission 0 — Launch to orbit
 const M0_EARTH_R    = 24000;
-const M0_GM         = 57.6e9;
-const M0_DRAG_CD    = 40;
-const M0_ATMO_SCALE = 700;
-const M0_ORBIT_MIN  = 550;
-const M0_ORBIT_MAX  = 950;
+const M0_GM         = 1.44e8;
+const M0_DRAG_CD    = 6;
+const M0_ATMO_SCALE = 300;
+const M0_ORBIT_MIN  = 200;
+const M0_ORBIT_MAX  = 450;
 const M0_HORIZ_MIN  = 0.78;
 const M0_HOLD       = 20;
 const M0_STAGE_SPLIT = 50;
-const M0_FUEL_DRAIN  = 8;
-const M0_THRUST     = 320;
+const M0_FUEL_DRAIN  = 6;
+const M0_THRUST     = 500;
 const M3_ORBIT_MIN  = 440;
 const M3_ORBIT_MAX  = 540;
 const M3_HOLD       = 30;
