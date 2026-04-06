@@ -848,18 +848,19 @@ function drawFuelBar(pct,fuelVal) {
   ctx.textAlign='left'; ctx.restore();
 }
 
-function drawSpeedGauge(speed) {
-  const gx=120,gy=H-118,gr=82,MAX_SPD=1000;
+function drawSpeedGauge(speed, MAX_SPD=1000) {
+  const gx=120,gy=H-118,gr=82;
   const startA=Math.PI*0.75,endA=Math.PI*2.25,pct=Math.min(speed/MAX_SPD,1);
   const fillEnd=startA+(endA-startA)*pct;
-  const sc=speed<400?'#38bdf8':speed<700?'#fbbf24':'#f87171';
+  const sc=speed<MAX_SPD*0.4?'#38bdf8':speed<MAX_SPD*0.7?'#fbbf24':'#f87171';
   ctx.save();
   ctx.beginPath(); ctx.arc(gx,gy,gr+2,startA,endA); ctx.strokeStyle='rgba(100,140,255,0.08)'; ctx.lineWidth=18; ctx.stroke();
   ctx.beginPath(); ctx.arc(gx,gy,gr,startA,endA); ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=12; ctx.lineCap='butt'; ctx.stroke();
-  for (let v=0;v<=MAX_SPD;v+=100) {
-    const a=startA+(endA-startA)*(v/MAX_SPD), inner=v%500===0?gr-18:gr-12;
+  const tickStep=MAX_SPD<=100?10:100, majorEvery=MAX_SPD<=100?50:500;
+  for (let v=0;v<=MAX_SPD;v+=tickStep) {
+    const a=startA+(endA-startA)*(v/MAX_SPD), inner=v%majorEvery===0?gr-18:gr-12;
     ctx.beginPath(); ctx.moveTo(gx+Math.cos(a)*inner,gy+Math.sin(a)*inner); ctx.lineTo(gx+Math.cos(a)*(gr+2),gy+Math.sin(a)*(gr+2));
-    ctx.strokeStyle=v%500===0?'rgba(180,200,255,0.5)':'rgba(180,200,255,0.2)'; ctx.lineWidth=v%500===0?2:1; ctx.stroke();
+    ctx.strokeStyle=v%majorEvery===0?'rgba(180,200,255,0.5)':'rgba(180,200,255,0.2)'; ctx.lineWidth=v%majorEvery===0?2:1; ctx.stroke();
   }
   if (pct>0) { ctx.beginPath(); ctx.arc(gx,gy,gr,startA,fillEnd); ctx.strokeStyle=sc; ctx.lineWidth=12; ctx.lineCap='round'; ctx.stroke(); }
   ctx.beginPath(); ctx.arc(gx+Math.cos(fillEnd)*gr,gy+Math.sin(fillEnd)*gr,7,0,Math.PI*2); ctx.fillStyle=sc; ctx.fill();
@@ -867,7 +868,7 @@ function drawSpeedGauge(speed) {
   ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=sc; ctx.fillText(speed.toFixed(0),gx,gy+10);
   ctx.font='600 12px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='#4a6080'; ctx.fillText('u/s',gx,gy+28);
   ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,200,255,0.3)';
-  ctx.fillText('1000',gx+Math.cos(endA)*(gr+16),gy+Math.sin(endA)*(gr+16)+4);
+  ctx.fillText(MAX_SPD,gx+Math.cos(endA)*(gr+16),gy+Math.sin(endA)*(gr+16)+4);
   ctx.fillText('0',gx+Math.cos(startA)*(gr+16),gy+Math.sin(startA)*(gr+16)+4);
   ctx.textAlign='left'; ctx.restore();
 }
@@ -936,8 +937,8 @@ function drawLandingHUD() {
   // Fuel bar
   drawFuelBar(fuelPct,lRocket.fuel);
 
-  // Speed gauge (same as orbit)
-  drawSpeedGauge(speed);
+  // Speed gauge scaled to landing speeds
+  drawSpeedGauge(speed, 100);
 
   // Vertical speed: radial component toward Moon surface (positive = descending)
   const surfNx=(lRocket.x-CX)/Math.max(distToMoon,1);
