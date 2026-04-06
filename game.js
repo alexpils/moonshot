@@ -1766,7 +1766,6 @@ function drawM0OutcomeBanner() {
 let lastNow = null;
 
 function loop(now) {
-  try {
   if (lastNow===null) lastNow=now;
   const realDt=Math.min((now-lastNow)/1000,0.05);
   lastNow=now;
@@ -1792,7 +1791,6 @@ function loop(now) {
   transition.draw();
 
   requestAnimationFrame(loop);
-  } catch(e) { console.error('LOOP ERROR:', e); document.body.style.background='red'; document.title=e.message; }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
