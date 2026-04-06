@@ -908,13 +908,15 @@ function renderTitle() {
   }
 
   // 5-card layout (00-04)
-  var c5W=420,c5gap=32,c5total=c5W*5+c5gap*4,c5start=CX-c5total/2;
+  // 6-card layout (00-05)
+  var c5W=370,c5gap=28,c5total=c5W*6+c5gap*5,c5start=CX-c5total/2;
   function c5x(i){return c5start+i*(c5W+c5gap);}
   drawCard('mission0',c5x(0),cardY,c5W,cardH,'\uD83D\uDE80','00','LAUNCH',          'Launch from Earth to orbit', false);
   drawCard('mission1',c5x(1),cardY,c5W,cardH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
   drawCard('mission2',c5x(2),cardY,c5W,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING', progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first',!progress.mission1Beaten);
   drawCard('mission3',c5x(3),cardY,c5W,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',  progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
   drawCard('mission4',c5x(4),cardY,c5W,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',   progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first',!progress.mission3Beaten);
+  drawCard('mission5',c5x(5),cardY,c5W,cardH,'\uD83D\uDD12','05','REENTRY','Coming soon…',true);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
