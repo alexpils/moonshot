@@ -460,7 +460,10 @@ function updatePhysics(realDt) {
   const thrusting=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&rocket.fuel>0;
 
   state.earthAngle += 0.105 * realDt;
-  if (left||right) state.orientMode=null;
+  if (left||right) { state.orientMode=null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
   if (left)  rocket.angle -= ROT_SPEED*realDt*warp;
   if (right) rocket.angle += ROT_SPEED*realDt*warp;
 
@@ -545,7 +548,10 @@ function updateLandingPhysics(realDt) {
   const right=keys.has('ArrowRight')||keys.has('KeyD');
   const thrusting=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&lRocket.fuel>0;
 
-  if (left||right) lState.orientMode=null;
+  if (left||right) { lState.orientMode=null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
   if (left)  lRocket.angle-=ROT_SPEED*realDt*warp;
   if (right) lRocket.angle+=ROT_SPEED*realDt*warp;
 
@@ -607,7 +613,10 @@ function updateM3Physics(realDt) {
   const right=keys.has('ArrowRight')||keys.has('KeyD');
   const thrusting=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m3Rocket.fuel>0;
 
-  if (left||right) m3State.orientMode=null;
+  if (left||right) { m3State.orientMode=null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
   if (left)  m3Rocket.angle-=ROT_SPEED*realDt*warp;
   if (right) m3Rocket.angle+=ROT_SPEED*realDt*warp;
 
@@ -1358,7 +1367,10 @@ function updateM4Physics(realDt) {
   var left=keys.has('ArrowLeft')||keys.has('KeyA'),right=keys.has('ArrowRight')||keys.has('KeyD');
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m4Rocket.fuel>0;
   m4State.earthAngle+=0.105*realDt;
-  if (left||right) m4State.orientMode=null;
+  if (left||right) { m4State.orientMode=null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
   if (left)  m4Rocket.angle-=ROT_SPEED*realDt*warp;
   if (right) m4Rocket.angle+=ROT_SPEED*realDt*warp;
   if (m4State.orientMode&&!left&&!right) {
@@ -1498,12 +1510,16 @@ function updateM0Physics(realDt) {
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
 
   var M0_ROT = ROT_SPEED * 0.25; // heavy rocket turns slowly
-  if (left||right) m0State.orientMode=null;
+  if (left||right) {
+    m0State.orientMode=null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
   if (m0State.launched) {
     if (left)  m0Rocket.angle-=M0_ROT*realDt*warp;
     if (right) m0Rocket.angle+=M0_ROT*realDt*warp;
   }
-  if (m0State.orientMode&&!left&&!right) {
+  if (m0State.launched&&m0State.orientMode&&!left&&!right) {
     var pro=Math.atan2(m0Rocket.vy,m0Rocket.vx),tgt=m0State.orientMode==='prograde'?pro:pro+Math.PI;
     var d=((tgt-m0Rocket.angle+Math.PI*3)%(Math.PI*2))-Math.PI,step=M0_ROT*1.5*realDt;
     if (Math.abs(d)<step) m0Rocket.angle=tgt; else m0Rocket.angle+=Math.sign(d)*step;
@@ -1575,7 +1591,7 @@ function updateM0Physics(realDt) {
       if (m0State.stableTimer>=M0_HOLD&&!transition.active) {
         endM0('win','ORBIT ACHIEVED');
         progress.unlockMission0();
-        transition.start(function(){scene='title';});
+        transition.start(function(){scene='orbit';resetGame();});
       }
     } else {
       m0State.stableTimer=0;
@@ -1670,7 +1686,7 @@ function renderM0() {
   strokePath(m0State.trail,'rgba(125,211,252,0.4)',1.5,[]);
 
   // Launch complex (only before launch)
-  if (!m0State.launched) drawM0LaunchComplex();
+  drawM0LaunchComplex();
 
   // Rocket
   drawM0Rocket();
@@ -1682,103 +1698,37 @@ function renderM0() {
 
 
 function drawM0LaunchComplex() {
-  // Rocket sits at (m0Rocket.x, m0Rocket.y) = (CX, H-35) before launch
-  // Build inspired by LC-39A: fixed service structure (FSS) tower, rotating service structure (RSS),
-  // flame trench, hold-down arms, lightning mast
-  var bx = CX, by = H - 35; // base = surface level at rocket position
-
+  var bx = CX, by = H - 35;
   ctx.save();
 
-  // ── Flame trench / blast pit ────────────────────────────────────────────
-  ctx.fillStyle = '#1e1a14';
-  ctx.fillRect(bx - 120, by, 240, 30);
-  // Trench deflector wedge
-  ctx.fillStyle = '#2d2820';
-  ctx.beginPath(); ctx.moveTo(bx-120,by); ctx.lineTo(bx,by+20); ctx.lineTo(bx+120,by); ctx.closePath(); ctx.fill();
-
-  // ── Launch mount / mobile launcher platform base ─────────────────────────
+  // Launch mount — small square base
   ctx.fillStyle = '#4a4540';
-  ctx.fillRect(bx - 60, by - 18, 120, 18);   // platform slab
-  ctx.fillStyle = '#5a534e';
-  ctx.fillRect(bx - 50, by - 14, 100, 14);   // top surface highlight
+  ctx.fillRect(bx - 18, by - 10, 36, 10);
 
-  // Platform legs (4 visible)
-  ctx.fillStyle = '#3a3530';
-  for (var lx of [-44, -20, 20, 44]) {
-    ctx.fillRect(bx + lx - 5, by, 10, 28);
+  // Hold-down arms
+  ctx.strokeStyle = '#78716c'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(bx - 10, by - 10); ctx.lineTo(bx - 8, by - 44); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx + 10, by - 10); ctx.lineTo(bx + 8, by - 44); ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // Service tower — right side, simple lattice
+  var tx = bx + 36, ty = by - 10, tH = 140;
+  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(tx,    ty); ctx.lineTo(tx,    ty - tH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(tx+12, ty); ctx.lineTo(tx+12, ty - tH); ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#475569';
+  for (var y = 0; y < tH; y += 24) {
+    ctx.beginPath(); ctx.moveTo(tx, ty-y); ctx.lineTo(tx+12, ty-y-24); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tx+12, ty-y); ctx.lineTo(tx, ty-y-24); ctx.stroke();
   }
 
-  // ── Hold-down arms (2 each side) ────────────────────────────────────────
-  if (!m0State.launched) {
-    ctx.strokeStyle = '#78716c'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-    // Left arms
-    ctx.beginPath(); ctx.moveTo(bx - 16, by - 18); ctx.lineTo(bx - 10, by - 52); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(bx - 16, by - 18); ctx.lineTo(bx - 10, by - 72); ctx.stroke();
-    // Right arms
-    ctx.beginPath(); ctx.moveTo(bx + 16, by - 18); ctx.lineTo(bx + 10, by - 52); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(bx + 16, by - 18); ctx.lineTo(bx + 10, by - 72); ctx.stroke();
-    ctx.lineCap = 'butt';
-  }
+  // Access arm at mid-height
+  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(tx, ty - tH*0.55); ctx.lineTo(bx + 8, ty - tH*0.55); ctx.stroke();
 
-  // ── Fixed Service Structure (FSS) — tall lattice tower, right side ───────
-  var tx = bx + 90, ty = by - 18; // tower base
-  var tH = 320; // tower height in px
-  // Main vertical columns
-  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(tx,      ty); ctx.lineTo(tx,      ty - tH); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(tx + 22, ty); ctx.lineTo(tx + 22, ty - tH); ctx.stroke();
-  // Cross-bracing (diagonal X every 40px)
-  ctx.lineWidth = 2; ctx.strokeStyle = '#475569';
-  for (var y = 0; y < tH; y += 40) {
-    ctx.beginPath(); ctx.moveTo(tx, ty-y);    ctx.lineTo(tx+22, ty-y-40); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(tx+22, ty-y); ctx.lineTo(tx,    ty-y-40); ctx.stroke();
-  }
-  // Horizontal platforms every 80px
-  ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 3;
-  for (var y = 0; y < tH; y += 80) {
-    ctx.beginPath(); ctx.moveTo(tx - 4, ty - y); ctx.lineTo(tx + 26, ty - y); ctx.stroke();
-  }
-
-  // ── Rotating Service Structure (RSS) arm ────────────────────────────────
-  // Horizontal arm extending left from tower toward rocket at ~60% up
-  var armY = ty - tH * 0.55;
-  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(tx, armY); ctx.lineTo(bx + 20, armY); ctx.stroke();
-  ctx.lineWidth = 2; ctx.strokeStyle = '#475569';
-  // RSS diagonal braces
-  ctx.beginPath(); ctx.moveTo(tx, armY + 10); ctx.lineTo(bx + 20, armY - 10); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(tx, armY - 10); ctx.lineTo(bx + 20, armY + 10); ctx.stroke();
-  // RSS end pad / white room
-  ctx.fillStyle = '#78716c';
-  ctx.fillRect(bx + 10, armY - 14, 22, 28);
-
-  // ── Access arm at crew level (~80% up) ──────────────────────────────────
-  var armY2 = ty - tH * 0.82;
-  ctx.strokeStyle = '#64748b'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(tx, armY2); ctx.lineTo(bx + 14, armY2); ctx.stroke();
-
-  // ── Lightning mast (tall thin spike from tower top) ───────────────────
-  ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(tx + 11, ty - tH); ctx.lineTo(tx + 11, ty - tH - 80); ctx.stroke();
-
-  // ── Catwalks / cable arms on far left ────────────────────────────────────
-  var ltx = bx - 90;
-  ctx.strokeStyle = '#475569'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(ltx, ty); ctx.lineTo(ltx, ty - tH * 0.7); ctx.stroke();
-  ctx.lineWidth = 2;
-  for (var y = 0; y < tH * 0.7; y += 40) {
-    ctx.beginPath(); ctx.moveTo(ltx, ty - y); ctx.lineTo(ltx - 12, ty - y - 20); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ltx - 12, ty - y - 20); ctx.lineTo(ltx, ty - y - 40); ctx.stroke();
-  }
-  // Left arm toward rocket
-  var armY3 = ty - tH * 0.45;
-  ctx.lineWidth = 4; ctx.strokeStyle = '#64748b';
-  ctx.beginPath(); ctx.moveTo(ltx, armY3); ctx.lineTo(bx - 18, armY3); ctx.stroke();
-
-  // ── Ground markings / blast area ─────────────────────────────────────────
-  ctx.strokeStyle = 'rgba(251,191,36,0.25)'; ctx.lineWidth = 2; ctx.setLineDash([6,10]);
-  ctx.strokeRect(bx - 130, by - 2, 260, 4);
-  ctx.setLineDash([]);
+  // Lightning mast
+  ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(tx+6, ty-tH); ctx.lineTo(tx+6, ty-tH-28); ctx.stroke();
 
   ctx.restore();
 }
@@ -1873,6 +1823,7 @@ function drawM0HUD() {
 }
 
 function drawM0OutcomeBanner(){
+  if (transition.active) return;
   drawOutcomeBanner(m0State.outcome,m0State.message,{retryKey:'retryM0',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  ORBIT ACHIEVED',winLine2:'STAGE 1 SEPARATED — MISSION COMPLETE',hint:'Pitch over after launch to go downrange'});
 }
 
