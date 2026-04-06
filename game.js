@@ -797,8 +797,13 @@ function renderTitle() {
   ctx.font='400 38px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,CY-50);
 
-  const cardW=560,cardH=230,gap=60,totalW=cardW*2+gap,cardY=CY+20;
-  const card1X=CX-totalW/2, card2X=CX-totalW/2+cardW+gap;
+  // 4 cards: fit within canvas width (2400px), keep consistent gap
+  const cardW=500,cardH=230,gap=40;
+  const totalW4=cardW*4+gap*3, cardY=CY+20;
+  const card1X=CX-totalW4/2;
+  const card2X=card1X+cardW+gap;
+  const card3Xv=card2X+cardW+gap;
+  const card4Xv=card3Xv+cardW+gap;
 
   function drawCard(key,x,y,w,h,icon,num,title2,sub,locked=false) {
     registerBtn(key,x,y,w,h);
@@ -818,14 +823,10 @@ function renderTitle() {
     ctx.restore();
   }
 
-  const cardW3=cardW, card3X=card2X+cardW+gap;
-  // Widen layout to 3 cards — shift all left
-  const shift=(cardW+gap);
-  drawCard('mission1',card1X-shift/2,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
-  drawCard('mission2',(card2X-shift/2),cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
-  const card4X=card3X+cardW+gap;
-  drawCard('mission3',(card3X-shift/2),cardY,cardW3,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',progress.mission2Beaten?'Launch and establish Moon orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
-  drawCard('mission4',(card4X-shift),cardY,cardW,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',progress.mission3Beaten?'Navigate back to Earth orbit':'Complete Lunar Ascent first',!progress.mission3Beaten);
+  drawCard('mission1',card1X,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
+  drawCard('mission2',card2X,cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  drawCard('mission3',card3Xv,cardY,cardW,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',progress.mission2Beaten?'Launch and establish Moon orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
+  drawCard('mission4',card4Xv,cardY,cardW,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',progress.mission3Beaten?'Navigate back to Earth orbit':'Complete Lunar Ascent first',!progress.mission3Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
