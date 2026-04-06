@@ -31,18 +31,19 @@ const PAD_ANGLE      = Math.PI / 2;
 const LAND_ESCAPE    = 960;
 
 
-// Mission 0 — Launch to orbit
-const M0_EARTH_R    = 24000;
-const M0_GM         = 1.44e8;
-const M0_DRAG_CD    = 6;
-const M0_ATMO_SCALE = 300;
-const M0_ORBIT_MIN  = 200;
-const M0_ORBIT_MAX  = 450;
-const M0_HORIZ_MIN  = 0.78;
-const M0_HOLD       = 20;
-const M0_STAGE_SPLIT = 50;
-const M0_FUEL_DRAIN  = 6;
-const M0_THRUST     = 500;
+// Mission 0 — Launch to orbit (ballistic feel, no orbital mechanics)
+const M0_EARTH_R    = 24000;  // visual only — for Earth arc rendering
+const M0_GRAVITY    = 80;    // constant downward pull (u/s²)
+const M0_DRAG_CD    = 18;     // atmospheric drag coefficient
+const M0_ATMO_SCALE = 350;    // drag halves every 350u altitude
+const M0_TARGET_MIN = 200;    // target altitude band (canvas pixels above pad)
+const M0_TARGET_MAX = 600;
+const M0_HORIZ_MIN  = 0.75;   // must be 75% horizontal to win
+const M0_HOLD       = 15;     // seconds to hold in band
+const M0_STAGE_SPLIT = 50;    // stage sep at 50% fuel
+const M0_FUEL_DRAIN  = 14;    // fuel drain rate (faster = more drama)
+const M0_S1_THRUST  = 1100;    // stage 1 thrust (fights gravity+drag hard)
+const M0_S2_THRUST  = 380;    // stage 2 (upper stage, efficient)
 const M3_ORBIT_MIN  = 440;
 const M3_ORBIT_MAX  = 540;
 const M3_HOLD       = 30;
@@ -1523,33 +1524,30 @@ function updateM0Physics(realDt) {
   for (var s=0;s<NSUB;s++) {
     if (m0State.outcome!=='playing') break;
 
-    var alt=m0AltRocket();
-    // Stage separation at M0_STAGE_SPLIT% fuel
+    // Stage separation
     if (m0State.stage===1&&m0Rocket.fuel<=M0_STAGE_SPLIT) {
       m0State.stage=2;
-      // Detached stage falls away
-      m0State.stage1={x:m0Rocket.x,y:m0Rocket.y,vx:m0Rocket.vx*0.95,vy:m0Rocket.vy*0.95};
+      m0State.stage1={x:m0Rocket.x,y:m0Rocket.y,vx:m0Rocket.vx*0.9,vy:m0Rocket.vy+30};
     }
 
     // Thrust
-    var thrust=m0State.stage===1?M0_THRUST*1.6:M0_THRUST;
-    if (thr) { m0State.launched=true;
+    var thrust=m0State.stage===1?M0_S1_THRUST:M0_S2_THRUST;
+    if (thr) {
+      m0State.launched=true;
       m0Rocket.vx+=Math.cos(m0Rocket.angle)*thrust*dt;
       m0Rocket.vy+=Math.sin(m0Rocket.angle)*thrust*dt;
-      m0Rocket.fuel=Math.max(0,m0Rocket.fuel-M0_FUEL_DRAIN*(thrust/THRUST)*dt);
+      m0Rocket.fuel=Math.max(0,m0Rocket.fuel-M0_FUEL_DRAIN*dt);
     }
 
     // Skip all physics until first thrust
     if (!m0State.launched) continue;
 
-    // Gravity toward Earth center below canvas
-    var dx=CX-m0Rocket.x, dy=(H + M0_EARTH_R - 30)-m0Rocket.y;
-    var dist2=dx*dx+dy*dy, dist=Math.sqrt(dist2);
-    var gA=M0_GM/Math.max(dist2,1e6);
-    m0Rocket.vx+=(dx/dist)*gA*dt; m0Rocket.vy+=(dy/dist)*gA*dt;
+    // Constant gravity straight down (ballistic feel)
+    m0Rocket.vy+=M0_GRAVITY*dt;
 
-    // Atmospheric drag
-    var density=Math.exp(-alt/M0_ATMO_SCALE);
+    // Atmospheric drag — exponential with altitude
+    var alt=m0AltRocket();
+    var density=Math.exp(-Math.max(0,alt)/M0_ATMO_SCALE);
     var speed=Math.hypot(m0Rocket.vx,m0Rocket.vy);
     if (speed>0) {
       var drag=M0_DRAG_CD*density*speed*dt;
@@ -1559,30 +1557,27 @@ function updateM0Physics(realDt) {
 
     m0Rocket.x+=m0Rocket.vx*dt; m0Rocket.y+=m0Rocket.vy*dt;
 
-    // Falling stage physics
+    // Falling stage 1 — simple gravity, no drag
     if (m0State.stage1) {
+      m0State.stage1.vy+=M0_GRAVITY*dt;
       m0State.stage1.x+=m0State.stage1.vx*dt;
       m0State.stage1.y+=m0State.stage1.vy*dt;
-      var sdx=CX-m0State.stage1.x,sdy=(H + M0_EARTH_R - 30)-m0State.stage1.y;
-      var sd2=sdx*sdx+sdy*sdy,sd=Math.sqrt(sd2);
-      m0State.stage1.vx+=(sdx/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
-      m0State.stage1.vy+=(sdy/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
     }
 
     var last=m0State.trail[m0State.trail.length-1];
     if (!last||Math.hypot(m0Rocket.x-last.x,m0Rocket.y-last.y)>3){m0State.trail.push({x:m0Rocket.x,y:m0Rocket.y});if(m0State.trail.length>TRAIL_MAX)m0State.trail.shift();}
-    evalM0State(dist-M0_EARTH_R);
+    evalM0State(alt);
   }
 
   // Per-frame hold timer
   if (m0State.outcome==='playing') {
     var alt2=m0AltRocket();
     var spd=Math.hypot(m0Rocket.vx,m0Rocket.vy),hFrac=spd>0?Math.abs(m0Rocket.vx)/spd:0;
-    var inBand=alt2>=M0_ORBIT_MIN&&alt2<=M0_ORBIT_MAX&&hFrac>=M0_HORIZ_MIN;
+    var inBand=alt2>=M0_TARGET_MIN&&alt2<=M0_TARGET_MAX&&hFrac>=M0_HORIZ_MIN;
     if (inBand) {
       m0State.stableTimer+=realDt;
       var rem=Math.max(0,M0_HOLD-m0State.stableTimer);
-      m0State.message=rem>0?'HOLDING ORBIT\u2026':'ORBIT ACHIEVED!';
+      m0State.message=rem>0?'DOWNRANGE — HOLD TRAJECTORY…':'ORBIT ACHIEVED!';
       if (m0State.stableTimer>=M0_HOLD&&!transition.active) {
         endM0('win','ORBIT ACHIEVED');
         progress.unlockMission0();
@@ -1591,26 +1586,26 @@ function updateM0Physics(realDt) {
     } else {
       m0State.stableTimer=0;
       if (m0State.outcome==='playing') {
-        var a2=m0AltRocket();
-        if (a2<100)        m0State.message='CLIMB \u2014 BUILD VERTICAL VELOCITY';
-        else if (a2<M0_ORBIT_MIN) m0State.message='PITCH OVER \u2014 BUILD HORIZONTAL VELOCITY';
-        else if (m0Rocket.fuel<=0) m0State.message='OUT OF FUEL';
-        else               m0State.message='CIRCULARISE ORBIT';
+        if (alt2<80)                   m0State.message='IGNITION — BURN PROGRADE';
+        else if (alt2<M0_TARGET_MIN)   m0State.message='PITCH OVER — GO DOWNRANGE';
+        else if (hFrac<M0_HORIZ_MIN)   m0State.message='MORE HORIZONTAL — PITCH OVER';
+        else if (m0Rocket.fuel<=0)     m0State.message='OUT OF FUEL';
+        else                           m0State.message='HOLD TRAJECTORY';
       }
     }
   }
 }
 
 function m0AltRocket() {
-  var dy=(H + M0_EARTH_R - 30)-m0Rocket.y, dx=CX-m0Rocket.x;
-  return Math.hypot(dx,dy)-M0_EARTH_R;
+  return (H-35) - m0Rocket.y;  // altitude above launch pad (positive = up)
 }
 
 function evalM0State(alt) {
   if (!m0State.launched) return;
-  if (alt<-5) return endM0('lose','CRASHED INTO EARTH');
-  if (alt>M0_ORBIT_MAX+500&&m0Rocket.fuel<=0) return endM0('lose','OUT OF FUEL');
-  if (m0Rocket.y<-200) return endM0('lose','LOST IN SPACE');
+  if (m0Rocket.y >= H-20) return endM0('lose','CRASHED INTO EARTH');
+  if (m0Rocket.x < -200 || m0Rocket.x > W+200) return endM0('lose','LOST IN SPACE');
+  if (m0Rocket.y < -500) return endM0('lose','LOST IN SPACE');
+  if (m0Rocket.fuel<=0 && alt < M0_TARGET_MIN) return endM0('lose','OUT OF FUEL');
 }
 
 function renderM0() {
@@ -1642,11 +1637,15 @@ function renderM0() {
   ctx.strokeStyle='rgba(147,197,253,0.35)'; ctx.lineWidth=3;
   ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+1,0,Math.PI*2); ctx.stroke();
 
-  // Orbit target arcs (shown as curves above horizon)
-  ctx.save(); ctx.setLineDash([6,10]);
-  ctx.strokeStyle='rgba(134,239,172,0.25)'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_ORBIT_MIN,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_ORBIT_MAX,0,Math.PI*2); ctx.stroke();
+  // Target altitude band — horizontal dashed lines
+  var padY = H-35;
+  ctx.save(); ctx.setLineDash([8,12]);
+  ctx.strokeStyle='rgba(134,239,172,0.3)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(0,padY-M0_TARGET_MIN); ctx.lineTo(W,padY-M0_TARGET_MIN); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,padY-M0_TARGET_MAX); ctx.lineTo(W,padY-M0_TARGET_MAX); ctx.stroke();
+  // subtle fill between them
+  ctx.fillStyle='rgba(134,239,172,0.04)';
+  ctx.fillRect(0,padY-M0_TARGET_MAX,W,M0_TARGET_MAX-M0_TARGET_MIN);
   ctx.setLineDash([]);
   ctx.restore();
 
@@ -1727,8 +1726,8 @@ function drawM0HUD() {
   }
 
   // Pills
-  var inBand=alt>=M0_ORBIT_MIN&&alt<=M0_ORBIT_MAX;
-  var altC=inBand?'#4ade80':(alt<M0_ORBIT_MIN?'#f87171':'#fbbf24');
+  var inBand=alt>=M0_TARGET_MIN&&alt<=M0_TARGET_MAX;
+  var altC=inBand?'#4ade80':(alt<M0_TARGET_MIN?'#f87171':'#fbbf24');
   var hPct=Math.round(hFrac*100), hC=hFrac>=M0_HORIZ_MIN?'#4ade80':(hFrac>0.5?'#fbbf24':'#f87171');
   var stageC=m0State.stage===1?'#fbbf24':'#94a3b8';
   var items=[
