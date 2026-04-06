@@ -78,22 +78,6 @@ canvas {
   box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03);
 }
 
-/* ── Overlay top-right inside canvas shell ── */
-.overlay {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 8px 12px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-}
-.title    { font-weight: 800; letter-spacing: 0.16em; font-size: 13px; }
-.subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; }
-.controls { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 11px; margin-top: 6px; }
-
 /* ── Bottom bar ── */
 .bottom-bar {
   height: var(--bottom-h);
@@ -180,8 +164,7 @@ canvas {
   :root        { --bottom-h: 0px; }
   .game-shell  { padding: 4px; }
   canvas       { max-height: 100vh; border-radius: 18px; }
-  .kb-only     { display: flex; }
-  /* Shrink side panels to just fit the orient buttons */
+/* Shrink side panels to just fit the orient buttons */
   .side-ctrl   { width: 64px; justify-content: center; gap: 8px; }
   /* Add keyboard hint to orient buttons via title tooltip */
   .orient-btn  { cursor: pointer; }
