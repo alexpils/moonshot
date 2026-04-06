@@ -1311,6 +1311,7 @@ function drawM3HUD() {
 }
 
 function drawM3OutcomeBanner(){
+  if (transition.active) return;
   drawOutcomeBanner(m3State.outcome,m3State.message,{retryKey:'retryM3',retryLabel:'\u21ba Retry',winLine1:'\uD83D\uDE80  LUNAR ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — PREPARE FOR RETURN',hint:'Reach the orbit band and hold for 30s'});
 }
 
@@ -1479,6 +1480,7 @@ function drawM4HUD(moon) {
 }
 
 function drawM4OutcomeBanner(){
+  if (transition.active) return;
   drawOutcomeBanner(m4State.outcome,m4State.message,{retryKey:'retryM4',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  EARTH ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — WELCOME HOME',hint:'Navigate back to Earth orbit and hold'});
 }
 
