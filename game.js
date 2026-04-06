@@ -349,11 +349,11 @@ function resetM3() {
   m3State = {
     warpIdx: 0, orientMode: null, outcome: 'playing',
     message: 'LAUNCH FROM THE MOON \u2014 ESTABLISH ORBIT',
-    trail: [], stableTimer: 0,
+    trail: [], stableTimer: 0, launched: false,
   };
   m3Rocket = {
     x: padX, y: padY, vx: 0, vy: 0,
-    angle: PAD_ANGLE - Math.PI / 2, fuel: 100,
+    angle: PAD_ANGLE, fuel: 100,  // pointing away from surface (radially outward)
   };
   document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
@@ -586,12 +586,13 @@ function updateM3Physics(realDt) {
   for (let s=0;s<NSUB;s++) {
     if (m3State.outcome!=='playing') break;
     if (thrusting) {
+      m3State.launched = true;
       m3Rocket.vx+=Math.cos(m3Rocket.angle)*M3_THRUST*dt;
       m3Rocket.vy+=Math.sin(m3Rocket.angle)*M3_THRUST*dt;
       m3Rocket.fuel=Math.max(0,m3Rocket.fuel-FUEL_DRAIN*(M3_THRUST/THRUST)*dt);
     }
     const gM=gravAccel(CX,CY,MOON_MASS,m3Rocket.x,m3Rocket.y);
-    m3Rocket.vx+=gM.ax*dt; m3Rocket.vy+=gM.ay*dt;
+    if (m3State.launched) { m3Rocket.vx+=gM.ax*dt; m3Rocket.vy+=gM.ay*dt; }
     m3Rocket.x+=m3Rocket.vx*dt; m3Rocket.y+=m3Rocket.vy*dt;
     const last=m3State.trail[m3State.trail.length-1];
     if (!last||Math.hypot(m3Rocket.x-last.x,m3Rocket.y-last.y)>3) {
@@ -603,6 +604,7 @@ function updateM3Physics(realDt) {
 }
 
 function evalM3State(dist, dt) {
+  if (!m3State.launched) return; // sitting on surface, no collision
   if (dist<LAND_MOON_R+4) return endM3('lose','CRASHED INTO THE MOON');
   if (dist>LAND_ESCAPE)   return endM3('lose','LOST IN SPACE');
   if (m3Rocket.fuel<=0&&(dist<M3_ORBIT_MIN||dist>M3_ORBIT_MAX)) return endM3('lose','OUT OF FUEL');
