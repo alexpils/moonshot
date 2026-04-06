@@ -30,6 +30,18 @@ const PAD_HALF       = 0.30;
 const PAD_ANGLE      = Math.PI / 2;
 const LAND_ESCAPE    = 960;
 
+
+// Mission 0 — Launch to orbit
+const M0_EARTH_R    = 24000;
+const M0_EARTH_CY   = H + M0_EARTH_R - 30;
+const M0_GM         = 57.6e9;
+const M0_DRAG_CD    = 500;
+const M0_ATMO_SCALE = 700;
+const M0_ORBIT_MIN  = 550;
+const M0_ORBIT_MAX  = 950;
+const M0_HORIZ_MIN  = 0.78;
+const M0_HOLD       = 20;
+const M0_THRUST     = 320;
 const M3_ORBIT_MIN  = 440;
 const M3_ORBIT_MAX  = 540;
 const M3_HOLD       = 30;
@@ -75,11 +87,12 @@ const LAND_CRATERS = [
 // SCENE MANAGEMENT
 // ════════════════════════════════════════════════════════════════════════════
 
-let scene = 'title'; // 'title' | 'orbit' | 'landing' | 'm3' | 'm4'
+let scene = 'title'; // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
 let m4EntryFuel  = 100;  // fuel at M4 start
+let m0Stage1Sep  = false; // M0 stage already separated
 
 // Fade transition state
 const transition = {
@@ -121,9 +134,11 @@ const transition = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const progress = {
+  get mission0Beaten() { return localStorage.getItem('moonshot_m0') === '1'; },
   get mission1Beaten() { return localStorage.getItem('moonshot_m1') === '1'; },
   get mission2Beaten() { return localStorage.getItem('moonshot_m2') === '1'; },
   get mission3Beaten() { return localStorage.getItem('moonshot_m3') === '1'; },
+  unlockMission0()     { localStorage.setItem('moonshot_m0', '1'); },
   unlockMission1()     { localStorage.setItem('moonshot_m1', '1'); },
   unlockMission2()     { localStorage.setItem('moonshot_m2', '1'); },
   unlockMission3()     { localStorage.setItem('moonshot_m3', '1'); },
@@ -141,13 +156,14 @@ window.addEventListener('keydown', e => {
   keys.add(e.code);
 
   if (e.code === 'KeyR') {
+    if (scene === 'm0')      { resetM0(); return; }
     if (scene === 'orbit')   { resetGame(); return; }
     if (scene === 'landing') { resetLanding(orbitHandoff); return; }
     if (scene === 'm3')      { resetM3(m3EntryFuel); return; }
     if (scene === 'm4')      { resetM4(m4EntryFuel); return; }
   }
 
-  const tOrient = scene === 'm4' ? m4State : (scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null)));
+  const tOrient = scene === 'm0' ? m0State : (scene === 'm4' ? m4State : (scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null))));
   if (!tOrient) return;
 
   if (e.code === 'KeyE') {
@@ -184,7 +200,8 @@ function handleCanvasClick(e) {
   }
 
   if (scene === 'title') {
-    if (hit(uiHitBoxes.mission1)) { scene = 'orbit'; resetGame(); }
+    if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); }
+    if (hit(uiHitBoxes.mission1) && progress.mission0Beaten) { scene = 'orbit'; resetGame(); }
     if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
     if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); }
     if (hit(uiHitBoxes.mission4) && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); }
@@ -243,6 +260,7 @@ function handleCanvasClick(e) {
 let state, rocket;
 let lState, lRocket;
 let m3State, m3Rocket;
+let m0State, m0Rocket;
 
 const pathLengthFilter = {
   len: 140,
@@ -798,13 +816,7 @@ function renderTitle() {
   ctx.font='400 38px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,CY-50);
 
-  // 4 cards: fit within canvas width (2400px), keep consistent gap
-  const cardW=500,cardH=230,gap=40;
-  const totalW4=cardW*4+gap*3, cardY=CY+20;
-  const card1X=CX-totalW4/2;
-  const card2X=card1X+cardW+gap;
-  const card3Xv=card2X+cardW+gap;
-  const card4Xv=card3Xv+cardW+gap;
+  const cardW=420,cardH=230,cardY=CY+20;
 
   function drawCard(key,x,y,w,h,icon,num,title2,sub,locked=false) {
     registerBtn(key,x,y,w,h);
@@ -824,10 +836,14 @@ function renderTitle() {
     ctx.restore();
   }
 
-  drawCard('mission1',card1X,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
-  drawCard('mission2',card2X,cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
-  drawCard('mission3',card3Xv,cardY,cardW,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',progress.mission2Beaten?'Launch and establish Moon orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
-  drawCard('mission4',card4Xv,cardY,cardW,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',progress.mission3Beaten?'Navigate back to Earth orbit':'Complete Lunar Ascent first',!progress.mission3Beaten);
+  // 5-card layout (00-04)
+  var c5W=420,c5gap=32,c5total=c5W*5+c5gap*4,c5start=CX-c5total/2;
+  function c5x(i){return c5start+i*(c5W+c5gap);}
+  drawCard('mission0',c5x(0),cardY,c5W,cardH,'\uD83D\uDE80','00','LAUNCH',          'Launch from Earth to orbit', false);
+  drawCard('mission1',c5x(1),cardY,c5W,cardH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
+  drawCard('mission2',c5x(2),cardY,c5W,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING', progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  drawCard('mission3',c5x(3),cardY,c5W,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',  progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
+  drawCard('mission4',c5x(4),cardY,c5W,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',   progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first',!progress.mission3Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
@@ -1467,6 +1483,286 @@ function drawM4OutcomeBanner() {
   ctx.textAlign='left';ctx.restore();
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// M0 — LAUNCH TO EARTH ORBIT
+// ════════════════════════════════════════════════════════════════════════════
+
+function resetM0() {
+  collisionFilter.reset(); pathLengthFilter.reset();
+  uiHitBoxes.retryM0 = null; uiHitBoxes.backToTitle = null;
+  m0State = {
+    warpIdx: 0, orientMode: null, outcome: 'playing',
+    message: 'IGNITION \u2014 BURN PROGRADE TO REACH ORBIT',
+    trail: [], stableTimer: 0, stage: 1,
+    stage1: null, // falling stage object {x,y,vx,vy}
+  };
+  m0Rocket = { x: CX, y: H-30, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
+  document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
+  document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
+}
+
+function endM0(o,m){m0State.outcome=o;m0State.message=m;}
+
+function updateM0Physics(realDt) {
+  var warp=WARP_LEVELS[m0State.warpIdx],simDt=realDt*TIME_SCALE*warp,NSUB=warp*2,dt=simDt/NSUB;
+  var left=keys.has('ArrowLeft')||keys.has('KeyA'),right=keys.has('ArrowRight')||keys.has('KeyD');
+  var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
+
+  if (left||right) m0State.orientMode=null;
+  if (left)  m0Rocket.angle-=ROT_SPEED*realDt*warp;
+  if (right) m0Rocket.angle+=ROT_SPEED*realDt*warp;
+  if (m0State.orientMode&&!left&&!right) {
+    var pro=Math.atan2(m0Rocket.vy,m0Rocket.vx),tgt=m0State.orientMode==='prograde'?pro:pro+Math.PI;
+    var d=((tgt-m0Rocket.angle+Math.PI*3)%(Math.PI*2))-Math.PI,step=ROT_SPEED*1.5*realDt;
+    if (Math.abs(d)<step) m0Rocket.angle=tgt; else m0Rocket.angle+=Math.sign(d)*step;
+  }
+
+  for (var s=0;s<NSUB;s++) {
+    if (m0State.outcome!=='playing') break;
+
+    var alt=m0AltRocket();
+    // Stage separation at M0_STAGE_SPLIT% fuel
+    if (m0State.stage===1&&m0Rocket.fuel<=M0_STAGE_SPLIT) {
+      m0State.stage=2;
+      // Detached stage falls away
+      m0State.stage1={x:m0Rocket.x,y:m0Rocket.y,vx:m0Rocket.vx*0.95,vy:m0Rocket.vy*0.95};
+    }
+
+    // Thrust
+    var thrust=m0State.stage===1?M0_THRUST*1.6:M0_THRUST;
+    if (thr) {
+      m0Rocket.vx+=Math.cos(m0Rocket.angle)*thrust*dt;
+      m0Rocket.vy+=Math.sin(m0Rocket.angle)*thrust*dt;
+      m0Rocket.fuel=Math.max(0,m0Rocket.fuel-FUEL_DRAIN*(thrust/THRUST)*dt);
+    }
+
+    // Gravity toward Earth center below canvas
+    var dx=CX-m0Rocket.x, dy=M0_EARTH_CY-m0Rocket.y;
+    var dist2=dx*dx+dy*dy, dist=Math.sqrt(dist2);
+    var gA=M0_GM/Math.max(dist2,1e6);
+    m0Rocket.vx+=(dx/dist)*gA*dt; m0Rocket.vy+=(dy/dist)*gA*dt;
+
+    // Atmospheric drag
+    var density=Math.exp(-alt/M0_ATMO_SCALE);
+    var speed=Math.hypot(m0Rocket.vx,m0Rocket.vy);
+    if (speed>0) {
+      var drag=M0_DRAG_CD*density*speed*dt;
+      m0Rocket.vx-=(m0Rocket.vx/speed)*drag;
+      m0Rocket.vy-=(m0Rocket.vy/speed)*drag;
+    }
+
+    m0Rocket.x+=m0Rocket.vx*dt; m0Rocket.y+=m0Rocket.vy*dt;
+
+    // Falling stage physics
+    if (m0State.stage1) {
+      m0State.stage1.x+=m0State.stage1.vx*dt;
+      m0State.stage1.y+=m0State.stage1.vy*dt;
+      var sdx=CX-m0State.stage1.x,sdy=M0_EARTH_CY-m0State.stage1.y;
+      var sd2=sdx*sdx+sdy*sdy,sd=Math.sqrt(sd2);
+      m0State.stage1.vx+=(sdx/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
+      m0State.stage1.vy+=(sdy/sd)*(M0_GM/Math.max(sd2,1e6))*dt;
+    }
+
+    var last=m0State.trail[m0State.trail.length-1];
+    if (!last||Math.hypot(m0Rocket.x-last.x,m0Rocket.y-last.y)>3){m0State.trail.push({x:m0Rocket.x,y:m0Rocket.y});if(m0State.trail.length>TRAIL_MAX)m0State.trail.shift();}
+    evalM0State(dist-M0_EARTH_R);
+  }
+
+  // Per-frame hold timer
+  if (m0State.outcome==='playing') {
+    var alt2=m0AltRocket();
+    var spd=Math.hypot(m0Rocket.vx,m0Rocket.vy),hFrac=spd>0?Math.abs(m0Rocket.vx)/spd:0;
+    var inBand=alt2>=M0_ORBIT_MIN&&alt2<=M0_ORBIT_MAX&&hFrac>=M0_HORIZ_MIN;
+    if (inBand) {
+      m0State.stableTimer+=realDt;
+      var rem=Math.max(0,M0_HOLD-m0State.stableTimer);
+      m0State.message=rem>0?'HOLDING ORBIT\u2026':'ORBIT ACHIEVED!';
+      if (m0State.stableTimer>=M0_HOLD&&!transition.active) {
+        endM0('win','ORBIT ACHIEVED');
+        progress.unlockMission0();
+        transition.start(function(){scene='title';});
+      }
+    } else {
+      m0State.stableTimer=0;
+      if (m0State.outcome==='playing') {
+        var a2=m0AltRocket();
+        if (a2<100)        m0State.message='CLIMB \u2014 BUILD VERTICAL VELOCITY';
+        else if (a2<M0_ORBIT_MIN) m0State.message='PITCH OVER \u2014 BUILD HORIZONTAL VELOCITY';
+        else if (m0Rocket.fuel<=0) m0State.message='OUT OF FUEL';
+        else               m0State.message='CIRCULARISE ORBIT';
+      }
+    }
+  }
+}
+
+function m0AltRocket() {
+  var dy=M0_EARTH_CY-m0Rocket.y, dx=CX-m0Rocket.x;
+  return Math.hypot(dx,dy)-M0_EARTH_R;
+}
+
+function evalM0State(alt) {
+  if (alt<0) return endM0('lose','CRASHED INTO EARTH');
+  if (alt>M0_ORBIT_MAX+500&&m0Rocket.fuel<=0) return endM0('lose','OUT OF FUEL');
+  if (m0Rocket.y<-200) return endM0('lose','LOST IN SPACE');
+}
+
+function renderM0() {
+  ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.setLineDash([]);
+  // Sky gradient — deep space at top, blue at bottom
+  var sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#020610'); sky.addColorStop(0.35,'#0a1a3a'); sky.addColorStop(0.75,'#1a4a8a'); sky.addColorStop(1,'#2a6ac0');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+
+  // Stars (fade based on altitude)
+  var alt=m0AltRocket(), starAlpha=Math.min(1,alt/600);
+  for (var i=0;i<STARS.length;i++) {
+    var s=STARS[i]; ctx.globalAlpha=s.a*starAlpha; ctx.fillStyle='#dbeafe';
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // Earth arc at bottom
+  var eCY=M0_EARTH_CY;
+  // Earth glow
+  var eg=ctx.createRadialGradient(CX,eCY,M0_EARTH_R*0.98,CX,eCY,M0_EARTH_R*1.04);
+  eg.addColorStop(0,'rgba(59,130,246,0.25)'); eg.addColorStop(1,'rgba(59,130,246,0)');
+  ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R*1.04,0,Math.PI*2); ctx.fill();
+  // Earth body
+  var eb=ctx.createRadialGradient(CX-M0_EARTH_R*0.1,eCY-M0_EARTH_R*0.1,M0_EARTH_R*0.3,CX,eCY,M0_EARTH_R);
+  eb.addColorStop(0,'#60a5fa'); eb.addColorStop(0.4,'#3b82f6'); eb.addColorStop(0.8,'#1d4ed8'); eb.addColorStop(1,'#172554');
+  ctx.fillStyle=eb; ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R,0,Math.PI*2); ctx.fill();
+  // Atmosphere rim
+  ctx.strokeStyle='rgba(147,197,253,0.35)'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+1,0,Math.PI*2); ctx.stroke();
+
+  // Orbit target arcs (shown as curves above horizon)
+  ctx.save(); ctx.setLineDash([6,10]);
+  ctx.strokeStyle='rgba(134,239,172,0.25)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_ORBIT_MIN,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_ORBIT_MAX,0,Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // Falling stage 1
+  if (m0State.stage1) {
+    var st=m0State.stage1;
+    ctx.save(); ctx.translate(st.x,st.y);
+    var sAngle=Math.atan2(st.vy,st.vx)+Math.PI;
+    ctx.rotate(sAngle);
+    ctx.fillStyle='rgba(150,160,180,0.7)';
+    ctx.fillRect(-4,-18,8,18); // stage body falling
+    ctx.restore();
+  }
+
+  // Trail
+  strokePath(m0State.trail,'rgba(125,211,252,0.4)',1.5,[]);
+
+  // Rocket (with stage if still attached)
+  drawM0Rocket();
+  drawM0HUD();
+}
+
+function drawM0Rocket() {
+  var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
+  ctx.save(); ctx.translate(m0Rocket.x,m0Rocket.y); ctx.rotate(m0Rocket.angle);
+
+  if (m0State.stage===1) {
+    // Stage 1 — fat lower cylinder
+    ctx.fillStyle='#94a3b8';
+    ctx.fillRect(-5,-20,10,20); // stage 1 body
+    ctx.fillStyle='#e2e8f0';
+    ctx.fillRect(-3,-20,6,-2); // interstage
+  }
+
+  // Exhaust flame
+  if (thr) {
+    ctx.fillStyle='rgba(251,146,60,'+(0.7+Math.random()*0.3)+')';
+    ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(-18-Math.random()*12,-4); ctx.lineTo(-18-Math.random()*12,4); ctx.closePath(); ctx.fill();
+    if (m0State.stage===1) {
+      ctx.fillStyle='rgba(251,100,30,'+(0.5+Math.random()*0.3)+')';
+      ctx.beginPath(); ctx.moveTo(-5,10); ctx.lineTo(-30-Math.random()*15,-5); ctx.lineTo(-30-Math.random()*15,5); ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // Upper stage (always present)
+  ctx.fillStyle='#f1f5f9';
+  ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-6,-5); ctx.lineTo(-4,0); ctx.lineTo(-6,5); ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawM0HUD() {
+  var speed=Math.hypot(m0Rocket.vx,m0Rocket.vy);
+  var alt=m0AltRocket();
+  var fuelPct=Math.max(0,Math.min(1,m0Rocket.fuel/100));
+  var warp=WARP_LEVELS[m0State.warpIdx];
+  var hFrac=speed>0?Math.abs(m0Rocket.vx)/speed:0;
+
+  if (m0State.outcome==='playing') drawStatusBar(m0State.message);
+  drawFuelBar(fuelPct,m0Rocket.fuel);
+  drawSpeedGauge(speed,800);
+
+  // Hold countdown
+  if (m0State.outcome==='playing'&&m0State.stableTimer>0) {
+    var rem=Math.max(0,M0_HOLD-m0State.stableTimer),prog=m0State.stableTimer/M0_HOLD;
+    var cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2); ctx.strokeStyle='rgba(134,239,172,0.12)'; ctx.lineWidth=14; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog); ctx.strokeStyle='rgba(134,239,172,'+(0.7*pulse).toFixed(2)+')'; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
+    ctx.textAlign='center';
+    ctx.font='800 72px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,'+pulse.toFixed(2)+')'; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
+    ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.6)'; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
+    ctx.textAlign='left'; ctx.restore();
+  }
+
+  // Pills
+  var inBand=alt>=M0_ORBIT_MIN&&alt<=M0_ORBIT_MAX;
+  var altC=inBand?'#4ade80':(alt<M0_ORBIT_MIN?'#f87171':'#fbbf24');
+  var hPct=Math.round(hFrac*100), hC=hFrac>=M0_HORIZ_MIN?'#4ade80':(hFrac>0.5?'#fbbf24':'#f87171');
+  var stageC=m0State.stage===1?'#fbbf24':'#94a3b8';
+  var items=[
+    {label:'ALT',value:alt.toFixed(0)+' u',color:altC},
+    {label:'HORIZ',value:hPct+'%',color:hC},
+    {label:'STAGE',value:m0State.stage===1?'1':'2 (SEP)',color:stageC},
+    {label:'WARP',value:warp+'\u00d7',color:'#ccddf8'},
+  ];
+  var pw=130,ph=44,gap=10,sx=230,sy=H-80;
+  ctx.save();
+  items.forEach(function(item,i){
+    var x=sx+i*(pw+gap),y=sy;
+    ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1;
+    rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
+    ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
+  });
+  ctx.restore();
+
+  drawM0OutcomeBanner();
+}
+
+function drawM0OutcomeBanner() {
+  if (m0State.outcome==='playing') return;
+  var isWin=m0State.outcome==='win', okCol=isWin?'#86efac':'#fca5a5';
+  var bw=500,bh=isWin?150:170,bx=W/2-bw/2,by=H/2-bh/2;
+  ctx.save();
+  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
+  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
+  ctx.textAlign='center';
+  if (isWin) {
+    ctx.font='800 30px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF0D  EARTH ORBIT ACHIEVED',W/2,by+50);
+    ctx.font='600 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('STAGE 1 SEPARATED \u2014 MISSION COMPLETE',W/2,by+84);
+    drawCanvasBtn('backToTitle','\u2190 Continue',W/2-100,by+bh-58,200,44,{fill:'rgba(20,60,30,0.95)',stroke:'rgba(134,239,172,0.7)',color:'#86efac',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
+  } else {
+    ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
+    ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(m0State.message,W/2,by+86);
+    ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
+    drawCanvasBtn('retryM0','\u21ba Retry',W/2-166,by+bh-58,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
+    drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
+  }
+  ctx.textAlign='left'; ctx.restore();
+}
+
 let lastNow = null;
 
 function loop(now) {
@@ -1474,6 +1770,7 @@ function loop(now) {
   const realDt=Math.min((now-lastNow)/1000,0.05);
   lastNow=now;
 
+  if (scene==='m0' && m0State.outcome==='playing') updateM0Physics(realDt);
   if (scene==='orbit') {
     if (state.outcome==='playing') updatePhysics(realDt);
     const inOrbit=state.stableTimer>0;
@@ -1486,6 +1783,7 @@ function loop(now) {
   transition.update(realDt);
 
   if (scene==='title')        renderTitle();
+  else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
   else if (scene==='landing') renderLanding();
   else if (scene==='m3')      renderM3();
@@ -1520,7 +1818,7 @@ function loop(now) {
 
 (function initOrientButtons() {
   function setMode(mode) {
-    const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
+    const tgt=scene==='m0'?m0State:(scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state)));
     if (!tgt) return;
     tgt.orientMode=tgt.orientMode===mode?null:mode;
     document.getElementById('btn-prograde')?.classList.toggle('pressed',tgt.orientMode==='prograde');
@@ -1566,7 +1864,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='m0')resetM0(); else if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
@@ -1585,6 +1883,8 @@ state  = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', 
 lState = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], fromOrbit: false };
 rocket  = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 lRocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
+m0State = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, stage: 1, stage1: null };
+m0Rocket = { x: CX, y: H-30, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
 m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0 };
 m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0 };
