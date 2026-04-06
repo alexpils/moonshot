@@ -11,7 +11,8 @@ const MOON_MASS  = 1800;
 const MOON_OMEGA = Math.sqrt(G * EARTH_MASS / Math.pow(470, 3));
 const TIME_SCALE = 0.44;
 const ROT_SPEED  = 3.2;
-const THRUST     = 360;
+const THRUST      = 360;   // orbit scene
+const LAND_THRUST = 120;   // landing scene — finer control
 
 const EARTH_R      = 28;
 const MOON_R       = 11;
@@ -477,7 +478,7 @@ function updateLandingPhysics(realDt) {
 
   for (let s=0;s<NSUB;s++) {
     if (lState.outcome!=='playing') break;
-    if (thrusting) { lRocket.vx+=Math.cos(lRocket.angle)*THRUST*dt; lRocket.vy+=Math.sin(lRocket.angle)*THRUST*dt; lRocket.fuel=Math.max(0,lRocket.fuel-FUEL_DRAIN*dt); }
+    if (thrusting) { lRocket.vx+=Math.cos(lRocket.angle)*LAND_THRUST*dt; lRocket.vy+=Math.sin(lRocket.angle)*LAND_THRUST*dt; lRocket.fuel=Math.max(0,lRocket.fuel-FUEL_DRAIN*(LAND_THRUST/THRUST)*dt); }
     const gM=gravAccel(CX,CY,MOON_MASS,lRocket.x,lRocket.y);
     lRocket.vx+=gM.ax*dt; lRocket.vy+=gM.ay*dt;
     lRocket.x+=lRocket.vx*dt; lRocket.y+=lRocket.vy*dt;
