@@ -1538,8 +1538,10 @@ function updateM0Physics(realDt) {
       m0Rocket.fuel=Math.max(0,m0Rocket.fuel-FUEL_DRAIN*(thrust/THRUST)*dt);
     }
 
-    // Gravity toward Earth center below canvas (only after launched)
-    if (!m0State.launched) { m0Rocket.vx=0; m0Rocket.vy=0; }
+    // Skip all physics until first thrust
+    if (!m0State.launched) continue;
+
+    // Gravity toward Earth center below canvas
     var dx=CX-m0Rocket.x, dy=(H + M0_EARTH_R - 30)-m0Rocket.y;
     var dist2=dx*dx+dy*dy, dist=Math.sqrt(dist2);
     var gA=M0_GM/Math.max(dist2,1e6);
@@ -1669,28 +1671,37 @@ function renderM0() {
 function drawM0Rocket() {
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
   ctx.save(); ctx.translate(m0Rocket.x,m0Rocket.y); ctx.rotate(m0Rocket.angle);
+  // Local axes: +x = nose direction (up when angle=-PI/2), -x = tail (down = toward Earth)
 
+  // Stage 1 body — drawn below the upper stage (in -x / tail direction)
   if (m0State.stage===1) {
-    // Stage 1 — fat lower cylinder
+    ctx.fillStyle='#64748b';
+    ctx.fillRect(-32,-5,26,10);   // stage 1 cylinder (tail-side)
     ctx.fillStyle='#94a3b8';
-    ctx.fillRect(-5,-20,10,20); // stage 1 body
-    ctx.fillStyle='#e2e8f0';
-    ctx.fillRect(-3,-20,6,-2); // interstage
+    ctx.fillRect(-6,-4,6,8);      // interstage adapter
+    // S1 nozzle bell
+    ctx.fillStyle='#475569';
+    ctx.beginPath(); ctx.moveTo(-32,-5); ctx.lineTo(-38,-7); ctx.lineTo(-38,7); ctx.lineTo(-32,5); ctx.closePath(); ctx.fill();
   }
 
-  // Exhaust flame
+  // Exhaust — shoots out the tail (-x direction)
   if (thr) {
+    // Upper stage exhaust
     ctx.fillStyle='rgba(251,146,60,'+(0.7+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(-18-Math.random()*12,-4); ctx.lineTo(-18-Math.random()*12,4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-6,3); ctx.lineTo(-6,-3); ctx.lineTo(-22-Math.random()*12,0); ctx.closePath(); ctx.fill();
+    // Stage 1 extra exhaust (bigger)
     if (m0State.stage===1) {
-      ctx.fillStyle='rgba(251,100,30,'+(0.5+Math.random()*0.3)+')';
-      ctx.beginPath(); ctx.moveTo(-5,10); ctx.lineTo(-30-Math.random()*15,-5); ctx.lineTo(-30-Math.random()*15,5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='rgba(253,186,116,'+(0.6+Math.random()*0.3)+')';
+      ctx.beginPath(); ctx.moveTo(-38,6); ctx.lineTo(-38,-6); ctx.lineTo(-60-Math.random()*20,0); ctx.closePath(); ctx.fill();
     }
   }
 
-  // Upper stage (always present)
+  // Upper stage capsule (nose direction = +x)
   ctx.fillStyle='#f1f5f9';
-  ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-6,-5); ctx.lineTo(-4,0); ctx.lineTo(-6,5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-4,-6); ctx.lineTo(-4,6); ctx.closePath(); ctx.fill();
+  // Capsule nose cone highlight
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-2,-2); ctx.lineTo(-2,0); ctx.closePath(); ctx.fill();
 
   ctx.restore();
 }
