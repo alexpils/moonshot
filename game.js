@@ -36,8 +36,8 @@ const M0_EARTH_R    = 24000;  // visual only — for Earth arc rendering
 const M0_GRAVITY    = 80;    // constant downward pull (u/s²)
 const M0_DRAG_CD    = 5;     // atmospheric drag coefficient
 const M0_ATMO_SCALE = 350;    // drag halves every 350u altitude
-const M0_TARGET_MIN = 200;    // target altitude band (canvas pixels above pad)
-const M0_TARGET_MAX = 600;
+const M0_TARGET_MIN = 350;    // target altitude band (canvas pixels above pad)
+const M0_TARGET_MAX = 750;
 const M0_HORIZ_MIN  = 0.75;   // must be 75% horizontal to win
 const M0_HOLD       = 15;     // seconds to hold in band
 const M0_STAGE_SPLIT = 50;    // stage sep at 50% fuel
@@ -1512,12 +1512,13 @@ function updateM0Physics(realDt) {
   var left=keys.has('ArrowLeft')||keys.has('KeyA'),right=keys.has('ArrowRight')||keys.has('KeyD');
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
 
+  var M0_ROT = ROT_SPEED * 0.25; // heavy rocket turns slowly
   if (left||right) m0State.orientMode=null;
-  if (left)  m0Rocket.angle-=ROT_SPEED*realDt*warp;
-  if (right) m0Rocket.angle+=ROT_SPEED*realDt*warp;
+  if (left)  m0Rocket.angle-=M0_ROT*realDt*warp;
+  if (right) m0Rocket.angle+=M0_ROT*realDt*warp;
   if (m0State.orientMode&&!left&&!right) {
     var pro=Math.atan2(m0Rocket.vy,m0Rocket.vx),tgt=m0State.orientMode==='prograde'?pro:pro+Math.PI;
-    var d=((tgt-m0Rocket.angle+Math.PI*3)%(Math.PI*2))-Math.PI,step=ROT_SPEED*1.5*realDt;
+    var d=((tgt-m0Rocket.angle+Math.PI*3)%(Math.PI*2))-Math.PI,step=M0_ROT*1.5*realDt;
     if (Math.abs(d)<step) m0Rocket.angle=tgt; else m0Rocket.angle+=Math.sign(d)*step;
   }
 
@@ -1572,7 +1573,13 @@ function updateM0Physics(realDt) {
   // Per-frame hold timer
   if (m0State.outcome==='playing') {
     var alt2=m0AltRocket();
-    var spd=Math.hypot(m0Rocket.vx,m0Rocket.vy),hFrac=spd>0?Math.abs(m0Rocket.vx)/spd:0;
+    // hFrac = fraction of velocity that is tangential (perpendicular to radial = "horizontal" along curvature)
+    var eCY2=H+M0_EARTH_R-30, rdx=m0Rocket.x-CX, rdy=m0Rocket.y-eCY2;
+    var rLen=Math.hypot(rdx,rdy)||1, rNx=rdx/rLen, rNy=rdy/rLen;
+    var spd=Math.hypot(m0Rocket.vx,m0Rocket.vy);
+    var radialV=m0Rocket.vx*rNx+m0Rocket.vy*rNy;
+    var tangV=Math.sqrt(Math.max(0,spd*spd-radialV*radialV));
+    var hFrac=spd>0?tangV/spd:0;
     var inBand=alt2>=M0_TARGET_MIN&&alt2<=M0_TARGET_MAX&&hFrac>=M0_HORIZ_MIN;
     if (inBand) {
       m0State.stableTimer+=realDt;
@@ -1597,74 +1604,89 @@ function updateM0Physics(realDt) {
 }
 
 function m0AltRocket() {
-  return (H-35) - m0Rocket.y;  // altitude above launch pad (positive = up)
+  // Radial distance from Earth center minus Earth radius = altitude above surface
+  var eCY = H + M0_EARTH_R - 30;
+  return Math.hypot(m0Rocket.x - CX, m0Rocket.y - eCY) - M0_EARTH_R;
 }
 
 function evalM0State(alt) {
   if (!m0State.launched) return;
-  if (m0Rocket.y >= H-20) return endM0('lose','CRASHED INTO EARTH');
-  if (m0Rocket.x < -200 || m0Rocket.x > W+200) return endM0('lose','LOST IN SPACE');
-  if (m0Rocket.y < -500) return endM0('lose','LOST IN SPACE');
+  if (alt < -5)   return endM0('lose','CRASHED INTO EARTH');
+  if (alt > M0_EARTH_R) return endM0('lose','LOST IN SPACE');
   if (m0Rocket.fuel<=0 && alt < M0_TARGET_MIN) return endM0('lose','OUT OF FUEL');
 }
 
 function renderM0() {
   ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.setLineDash([]);
-  // Sky gradient — deep space at top, blue at bottom
+
+  // ── Camera: follow rocket, keep it at 65% down / 50% across ─────────────
+  var camX = CX - m0Rocket.x;          // horizontal follow
+  var targetY = H * 0.65;
+  var camY = targetY - m0Rocket.y;      // vertical follow
+  // On ground, don't scroll below launch position
+  camY = Math.min(camY, 0);
+
+  // Altitude for effects
+  var alt = m0AltRocket();
+
+  // Sky gradient (fixed, behind world)
   var sky=ctx.createLinearGradient(0,0,0,H);
-  sky.addColorStop(0,'#020610'); sky.addColorStop(0.35,'#0a1a3a'); sky.addColorStop(0.75,'#1a4a8a'); sky.addColorStop(1,'#2a6ac0');
+  sky.addColorStop(0,'#020610'); sky.addColorStop(0.35,'#0a1a3a');
+  sky.addColorStop(0.75,'#1a4a8a'); sky.addColorStop(1,'#2a6ac0');
   ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
 
-  // Stars (fade based on altitude)
-  var alt=m0AltRocket(), starAlpha=Math.min(1,alt/600);
+  // Stars (fade in with altitude)
+  var starAlpha=Math.min(1,alt/500);
   for (var i=0;i<STARS.length;i++) {
     var s=STARS[i]; ctx.globalAlpha=s.a*starAlpha; ctx.fillStyle='#dbeafe';
     ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
   }
   ctx.globalAlpha=1;
 
-  // Earth arc at bottom
-  var eCY=(H + M0_EARTH_R - 30);
-  // Earth glow
+  // ── World transform ──────────────────────────────────────────────────────
+  ctx.save();
+  ctx.translate(camX, camY);
+
+  // Earth arc
+  var eCY = H + M0_EARTH_R - 30;
   var eg=ctx.createRadialGradient(CX,eCY,M0_EARTH_R*0.98,CX,eCY,M0_EARTH_R*1.04);
   eg.addColorStop(0,'rgba(59,130,246,0.25)'); eg.addColorStop(1,'rgba(59,130,246,0)');
   ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R*1.04,0,Math.PI*2); ctx.fill();
-  // Earth body
-  var eb=ctx.createRadialGradient(CX-M0_EARTH_R*0.1,eCY-M0_EARTH_R*0.1,M0_EARTH_R*0.3,CX,eCY,M0_EARTH_R);
+  var eb=ctx.createRadialGradient(CX,eCY,M0_EARTH_R*0.3,CX,eCY,M0_EARTH_R);
   eb.addColorStop(0,'#60a5fa'); eb.addColorStop(0.4,'#3b82f6'); eb.addColorStop(0.8,'#1d4ed8'); eb.addColorStop(1,'#172554');
   ctx.fillStyle=eb; ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R,0,Math.PI*2); ctx.fill();
-  // Atmosphere rim
   ctx.strokeStyle='rgba(147,197,253,0.35)'; ctx.lineWidth=3;
   ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+1,0,Math.PI*2); ctx.stroke();
 
-  // Target altitude band — horizontal dashed lines
-  var padY = H-35;
-  ctx.save(); ctx.setLineDash([8,12]);
-  ctx.strokeStyle='rgba(134,239,172,0.3)'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.moveTo(0,padY-M0_TARGET_MIN); ctx.lineTo(W,padY-M0_TARGET_MIN); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0,padY-M0_TARGET_MAX); ctx.lineTo(W,padY-M0_TARGET_MAX); ctx.stroke();
-  // subtle fill between them
-  ctx.fillStyle='rgba(134,239,172,0.04)';
-  ctx.fillRect(0,padY-M0_TARGET_MAX,W,M0_TARGET_MAX-M0_TARGET_MIN);
+  // Target corridor — circular arcs centred on Earth
+  ctx.save(); ctx.setLineDash([8,14]);
+  ctx.strokeStyle='rgba(134,239,172,0.35)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_TARGET_MIN,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_TARGET_MAX,0,Math.PI*2); ctx.stroke();
   ctx.setLineDash([]);
+  // Subtle corridor fill
+  ctx.globalAlpha=0.04; ctx.fillStyle='#86efac';
+  ctx.beginPath(); ctx.arc(CX,eCY,M0_EARTH_R+M0_TARGET_MAX,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1;
   ctx.restore();
 
   // Falling stage 1
   if (m0State.stage1) {
     var st=m0State.stage1;
     ctx.save(); ctx.translate(st.x,st.y);
-    var sAngle=Math.atan2(st.vy,st.vx)+Math.PI;
-    ctx.rotate(sAngle);
+    ctx.rotate(Math.atan2(st.vy,st.vx)+Math.PI);
     ctx.fillStyle='rgba(150,160,180,0.7)';
-    ctx.fillRect(-4,-18,8,18); // stage body falling
-    ctx.restore();
+    ctx.fillRect(-4,-3,22,6); ctx.restore();
   }
 
   // Trail
   strokePath(m0State.trail,'rgba(125,211,252,0.4)',1.5,[]);
 
-  // Rocket (with stage if still attached)
+  // Rocket
   drawM0Rocket();
+
+  ctx.restore(); // end world transform
+
   drawM0HUD();
 }
 
@@ -1709,7 +1731,11 @@ function drawM0HUD() {
   var alt=m0AltRocket();
   var fuelPct=Math.max(0,Math.min(1,m0Rocket.fuel/100));
   var warp=WARP_LEVELS[m0State.warpIdx];
-  var hFrac=speed>0?Math.abs(m0Rocket.vx)/speed:0;
+  var eCY2=H+M0_EARTH_R-30, rdx2=m0Rocket.x-CX, rdy2=m0Rocket.y-eCY2;
+  var rLen2=Math.hypot(rdx2,rdy2)||1;
+  var radV2=m0Rocket.vx*(rdx2/rLen2)+m0Rocket.vy*(rdy2/rLen2);
+  var tangV2=Math.sqrt(Math.max(0,speed*speed-radV2*radV2));
+  var hFrac=speed>0?tangV2/speed:0;
 
   if (m0State.outcome==='playing') drawStatusBar(m0State.message);
   drawFuelBar(fuelPct,m0Rocket.fuel);
