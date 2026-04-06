@@ -1862,13 +1862,8 @@ function loop(now) {
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
-  // Show/hide menu button + touch controls based on scene
-  { const mb=document.getElementById('btn-menu');
-    const onTitle = scene==='title';
-    document.querySelector('.bottom-bar')?.classList.toggle('hidden', onTitle);
-    document.querySelector('.side-ctrl.left-ctrl')?.classList.toggle('hidden', onTitle);
-    document.querySelector('.side-ctrl.right-ctrl')?.classList.toggle('hidden', onTitle);
-  }
+  // Show/hide touch controls based on scene
+  setTouchUIVisible(scene!=='title');
   if (scene==='title')        renderTitle();
   else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
@@ -1895,6 +1890,19 @@ function loop(now) {
   btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleFS();},{passive:false});
   const menuBtn=document.getElementById('btn-menu');
   if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')scene='title';},{passive:false});
+
+  // Cache touch UI elements
+  const _bottomBar  = document.querySelector('.bottom-bar');
+  const _leftCtrl   = document.querySelector('.side-ctrl.left-ctrl');
+  const _rightCtrl  = document.querySelector('.side-ctrl.right-ctrl');
+  function setTouchUIVisible(vis) {
+    [_bottomBar, _leftCtrl, _rightCtrl].forEach(el => {
+      if (!el) return;
+      if (vis) el.classList.remove('hidden');
+      else     el.classList.add('hidden');
+    });
+  }
+  setTouchUIVisible(false); // start on title
   function onFSChange() { const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement); btn.textContent=inFS?'\u2715':'\u26f6'; btn.style.display=inFS?'none':''; }
   document.addEventListener('fullscreenchange',onFSChange); document.addEventListener('webkitfullscreenchange',onFSChange);
 })();
