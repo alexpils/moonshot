@@ -797,6 +797,48 @@ function drawRocket(x,y,angle,thrusting) {
 // RENDER – TITLE
 // ════════════════════════════════════════════════════════════════════════════
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// SHARED OUTCOME BANNER
+// ════════════════════════════════════════════════════════════════════════════
+function drawOutcomeBanner(outcome, message, opts) {
+  if (outcome==='playing') return;
+  var isWin = outcome==='win';
+  var bw=540, bh=196, bx=W/2-bw/2, by=H/2-bh/2;
+  ctx.save();
+  ctx.fillStyle='rgba(6,10,24,0.95)';
+  ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
+  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
+  ctx.textAlign='center';
+  var textCol=isWin?'#86efac':'#fca5a5';
+  var subCol=isWin?'rgba(134,239,172,0.8)':'rgba(252,165,165,0.8)';
+  // Headline
+  ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=textCol;
+  ctx.fillText(isWin?(opts.winLine1||'\u2713  MISSION COMPLETE'):'\uD83D\uDCA5  MISSION FAILED',W/2,by+48);
+  // Sub-line
+  ctx.font='600 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=subCol;
+  ctx.fillText(isWin?(opts.winLine2||''):(message||''),W/2,by+82);
+  // Hint (lose only)
+  if (!isWin && opts.hint) {
+    ctx.font='500 16px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.55)';
+    ctx.fillText(opts.hint,W/2,by+112);
+  }
+  // Buttons at fixed distance from bottom — never overlap text
+  var btnY=by+bh-52;
+  if (isWin) {
+    drawCanvasBtn(opts.winBtnKey||'backToTitle',opts.winBtnLabel||'\u2190 Continue',
+      W/2-110,btnY,220,44,{fill:'rgba(20,60,30,0.95)',stroke:'rgba(134,239,172,0.7)',color:'#86efac',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
+  } else {
+    if (opts.retryKey) {
+      drawCanvasBtn(opts.retryKey,opts.retryLabel||'\u21ba Retry',
+        W/2-176,btnY,162,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
+    }
+    drawCanvasBtn('backToTitle','\u2190 Menu',
+      opts.retryKey?W/2+14:W/2-81,btnY,162,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
+  }
+  ctx.textAlign='left'; ctx.restore();
+}
+
 function renderTitle() {
   ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.setLineDash([]);
   const bg=ctx.createRadialGradient(CX,CY,100,CX,CY,H);
@@ -1092,20 +1134,8 @@ function drawCountdownOverlay() {
   ctx.textAlign='left'; ctx.restore();
 }
 
-function drawOrbitOutcomeBanner() {
-  // Win case: seamless transition fires automatically, no banner needed
-  if (state.outcome==='playing'||state.outcome==='win') return;
-  const okCol='#fca5a5';
-  const bw=500, bh=170, bx=W/2-bw/2, by=H/2-bh/2;
-  ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle='rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
-  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
-  ctx.textAlign='center';
-  ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-  ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(state.message,W/2,by+86);
-  ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
-  drawCanvasBtn('backToTitle','\u2190 Menu',W/2-76,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
-  ctx.textAlign='left'; ctx.restore();
+function drawOrbitOutcomeBanner(){
+  if(state.outcome==='playing'||state.outcome==='win')return;drawOutcomeBanner(state.outcome,state.message,{retryKey:null,hint:'Hold stable orbit for 30 seconds'});
 }
 
 
@@ -1156,28 +1186,8 @@ function drawLandingHUD() {
   drawLandingOutcomeBanner();
 }
 
-function drawLandingOutcomeBanner() {
-  if (lState.outcome==='playing') return;
-  if (lState.outcome==='win') return; // seamless transition handles win
-  const isWin=lState.outcome==='win';
-  const okCol=isWin?'#86efac':'#fca5a5';
-  const bw=500, bh=isWin?160:180, bx=W/2-bw/2, by=H/2-bh/2;
-  ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
-  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
-  ctx.textAlign='center';
-  if (isWin) {
-    ctx.font='800 34px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF15  TOUCHDOWN!',W/2,by+52);
-    ctx.font='600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('MISSION COMPLETE',W/2,by+88);
-  } else {
-    ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-    ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(lState.message,W/2,by+86);
-    ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Aim for the landing zone below ' + LAND_SPEED_MAX + ' u/s',W/2,by+116);
-  }
-  const btnY = by+bh-58;
-  drawCanvasBtn('retryLanding','\u21ba Retry',W/2-166,btnY,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
-  drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,btnY,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
-  ctx.textAlign='left'; ctx.restore();
+function drawLandingOutcomeBanner(){
+  if(lState.outcome==='playing'||lState.outcome==='win')return;drawOutcomeBanner(lState.outcome,lState.message,{retryKey:'retryLanding',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF15  TOUCHDOWN!',winLine2:'MISSION COMPLETE',hint:'Aim for the LZ below '+LAND_SPEED_MAX+' u/s'});
 }
 
 
@@ -1287,19 +1297,8 @@ function drawM3HUD() {
   drawM3OutcomeBanner();
 }
 
-function drawM3OutcomeBanner() {
-  if (m3State.outcome==='playing'||m3State.outcome==='win') return;
-  const bw=500, bh=170, bx=W/2-bw/2, by=H/2-bh/2;
-  ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle='rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
-  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
-  ctx.textAlign='center';
-  ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='#fca5a5'; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-  ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(m3State.message,W/2,by+86);
-  ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
-  drawCanvasBtn('retryM3','\u21ba Retry',W/2-166,by+bh-58,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
-  drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
-  ctx.textAlign='left'; ctx.restore();
+function drawM3OutcomeBanner(){
+  drawOutcomeBanner(m3State.outcome,m3State.message,{retryKey:'retryM3',retryLabel:'\u21ba Retry',winLine1:'\uD83D\uDE80  LUNAR ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — PREPARE FOR RETURN',hint:'Reach the orbit band and hold for 30s'});
 }
 
 
@@ -1463,26 +1462,8 @@ function drawM4HUD(moon) {
   drawM4OutcomeBanner();
 }
 
-function drawM4OutcomeBanner() {
-  if (m4State.outcome==='playing') return;
-  var isWin=m4State.outcome==='win',okCol=isWin?'#93c5fd':'#fca5a5';
-  var bw=500,bh=isWin?160:170,bx=W/2-bw/2,by=H/2-bh/2;
-  ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)';ctx.strokeStyle=isWin?'rgba(96,165,250,0.6)':'rgba(252,165,165,0.55)';ctx.lineWidth=1.5;
-  rrect(bx,by,bw,bh,18);ctx.fill();ctx.stroke();
-  ctx.textAlign='center';
-  if (isWin) {
-    ctx.font='800 30px Inter,ui-sans-serif,sans-serif';ctx.fillStyle=okCol;ctx.fillText('\uD83C\uDF0D  EARTH ORBIT ACHIEVED',W/2,by+52);
-    ctx.font='600 20px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(147,197,253,0.8)';ctx.fillText('YOU HAVE RETURNED HOME',W/2,by+88);
-    drawCanvasBtn('backToTitle','\u2190 Main Menu',W/2-100,by+bh-58,200,44,{fill:'rgba(10,15,40,0.9)',stroke:'rgba(96,165,250,0.5)',color:'#93c5fd',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
-  } else {
-    ctx.font='800 28px Inter,ui-sans-serif,sans-serif';ctx.fillStyle=okCol;ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-    ctx.font='700 20px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(252,165,165,0.8)';ctx.fillText(m4State.message,W/2,by+86);
-    ctx.font='500 17px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(180,140,140,0.6)';ctx.fillText('Press R to retry',W/2,by+116);
-    drawCanvasBtn('retryM4','\u21ba Retry',W/2-166,by+bh-58,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
-    drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
-  }
-  ctx.textAlign='left';ctx.restore();
+function drawM4OutcomeBanner(){
+  drawOutcomeBanner(m4State.outcome,m4State.message,{retryKey:'retryM4',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  EARTH ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — WELCOME HOME',hint:'Navigate back to Earth orbit and hold'});
 }
 
 
@@ -1779,26 +1760,8 @@ function drawM0HUD() {
   drawM0OutcomeBanner();
 }
 
-function drawM0OutcomeBanner() {
-  if (m0State.outcome==='playing') return;
-  var isWin=m0State.outcome==='win', okCol=isWin?'#86efac':'#fca5a5';
-  var bw=500,bh=isWin?150:170,bx=W/2-bw/2,by=H/2-bh/2;
-  ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.6)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
-  rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
-  ctx.textAlign='center';
-  if (isWin) {
-    ctx.font='800 30px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF0D  EARTH ORBIT ACHIEVED',W/2,by+50);
-    ctx.font='600 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('STAGE 1 SEPARATED \u2014 MISSION COMPLETE',W/2,by+84);
-    drawCanvasBtn('backToTitle','\u2190 Continue',W/2-100,by+bh-58,200,44,{fill:'rgba(20,60,30,0.95)',stroke:'rgba(134,239,172,0.7)',color:'#86efac',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
-  } else {
-    ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-    ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(m0State.message,W/2,by+86);
-    ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
-    drawCanvasBtn('retryM0','\u21ba Retry',W/2-166,by+bh-58,152,44,{fill:'rgba(20,30,60,0.95)',stroke:'rgba(150,200,255,0.4)',color:'#c8d8f8',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
-    drawCanvasBtn('backToTitle','\u2190 Menu',W/2+14,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 21px Inter,ui-sans-serif,sans-serif'});
-  }
-  ctx.textAlign='left'; ctx.restore();
+function drawM0OutcomeBanner(){
+  drawOutcomeBanner(m0State.outcome,m0State.message,{retryKey:'retryM0',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  ORBIT ACHIEVED',winLine2:'STAGE 1 SEPARATED — MISSION COMPLETE',hint:'Pitch over after launch to go downrange'});
 }
 
 let lastNow = null;
