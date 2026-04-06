@@ -193,6 +193,28 @@ canvas {
   transition: background 0.1s;
 }
 .fullscreen-btn:active { background: rgba(59,130,246,0.5); }
+.menu-btn {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 100;
+  background: rgba(20, 30, 70, 0.85);
+  border: 1px solid rgba(100,160,255,0.3);
+  border-radius: 10px;
+  color: #93c5fd;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.1s;
+}
+.menu-btn:active { background: rgba(59,130,246,0.5); }
+.menu-btn.hidden { display: none; }
+
 
 /* Hide fullscreen button on desktop (less needed, keyboard F11 works) */
 @media (hover: hover) and (pointer: fine) {

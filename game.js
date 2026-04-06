@@ -1862,6 +1862,9 @@ function loop(now) {
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
+  // Show/hide menu button
+  { const mb=document.getElementById('btn-menu');
+    if (mb) mb.classList.toggle('hidden', scene==='title'); }
   if (scene==='title')        renderTitle();
   else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
@@ -1886,6 +1889,8 @@ function loop(now) {
     } else { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }
   }
   btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleFS();},{passive:false});
+  const menuBtn=document.getElementById('btn-menu');
+  if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')scene='title';},{passive:false});
   function onFSChange() { const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement); btn.textContent=inFS?'\u2715':'\u26f6'; btn.style.display=inFS?'none':''; }
   document.addEventListener('fullscreenchange',onFSChange); document.addEventListener('webkitfullscreenchange',onFSChange);
 })();
