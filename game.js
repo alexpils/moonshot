@@ -75,10 +75,11 @@ const LAND_CRATERS = [
 // SCENE MANAGEMENT
 // ════════════════════════════════════════════════════════════════════════════
 
-let scene = 'title'; // 'title' | 'orbit' | 'landing' | 'm3'
+let scene = 'title'; // 'title' | 'orbit' | 'landing' | 'm3' | 'm4'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
+let m4EntryFuel  = 100;  // fuel at M4 start
 
 // Fade transition state
 const transition = {
@@ -122,8 +123,10 @@ const transition = {
 const progress = {
   get mission1Beaten() { return localStorage.getItem('moonshot_m1') === '1'; },
   get mission2Beaten() { return localStorage.getItem('moonshot_m2') === '1'; },
+  get mission3Beaten() { return localStorage.getItem('moonshot_m3') === '1'; },
   unlockMission1()     { localStorage.setItem('moonshot_m1', '1'); },
   unlockMission2()     { localStorage.setItem('moonshot_m2', '1'); },
+  unlockMission3()     { localStorage.setItem('moonshot_m3', '1'); },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -141,9 +144,10 @@ window.addEventListener('keydown', e => {
     if (scene === 'orbit')   { resetGame(); return; }
     if (scene === 'landing') { resetLanding(orbitHandoff); return; }
     if (scene === 'm3')      { resetM3(m3EntryFuel); return; }
+    if (scene === 'm4')      { resetM4(m4EntryFuel); return; }
   }
 
-  const tOrient = scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null));
+  const tOrient = scene === 'm4' ? m4State : (scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null)));
   if (!tOrient) return;
 
   if (e.code === 'KeyE') {
@@ -183,6 +187,7 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.mission1)) { scene = 'orbit'; resetGame(); }
     if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
     if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); }
+    if (hit(uiHitBoxes.mission4) && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -222,6 +227,10 @@ function handleCanvasClick(e) {
   }
   if (scene === 'm3') {
     if (hit(uiHitBoxes.retryM3))    resetM3(m3EntryFuel);
+    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+  }
+  if (scene === 'm4') {
+    if (hit(uiHitBoxes.retryM4))    resetM4(m4EntryFuel);
     if (hit(uiHitBoxes.backToTitle)) scene = 'title';
   }
 }
@@ -619,24 +628,12 @@ function evalM3State(dist, dt) {
     m3State.message=rem>0?'HOLDING ORBIT\u2026':'ORBIT ESTABLISHED!';
     if (m3State.stableTimer>=M3_HOLD) {
       endM3('win','MISSION COMPLETE');
-      progress.unlockMission2();
+      progress.unlockMission3();
+      const _m4Fuel = m3Rocket.fuel;
+      m4EntryFuel = _m4Fuel;
       transition.start(()=>{
-        scene='orbit';
-        resetGame();
-        // Place rocket near Moon in a stable orbit
-        const moon=moonXY(state.moonAngle);
-        const midR=(M3_ORBIT_MIN+M3_ORBIT_MAX)/2;
-        const spA=-Math.PI/2;
-        const vC=Math.sqrt(G*MOON_MASS/midR);
-        const moonVx=-Math.sin(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
-        const moonVy= Math.cos(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
-        rocket.x=moon.x+Math.cos(spA)*midR;
-        rocket.y=moon.y+Math.sin(spA)*midR;
-        rocket.vx=-Math.sin(spA)*vC+moonVx;
-        rocket.vy= Math.cos(spA)*vC+moonVy;
-        rocket.fuel=m3Rocket.fuel;
-        rocket.angle=spA+Math.PI/2;
-        state.message='IN LUNAR ORBIT \u2014 BURN RETROGRADE TO RETURN HOME';
+        scene='m4';
+        resetM4(_m4Fuel);
       });
     }
   } else {
@@ -826,7 +823,9 @@ function renderTitle() {
   const shift=(cardW+gap);
   drawCard('mission1',card1X-shift/2,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
   drawCard('mission2',(card2X-shift/2),cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  const card4X=card3X+cardW+gap;
   drawCard('mission3',(card3X-shift/2),cardY,cardW3,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',progress.mission2Beaten?'Launch and establish Moon orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
+  drawCard('mission4',(card4X-shift),cardY,cardW,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',progress.mission3Beaten?'Navigate back to Earth orbit':'Complete Lunar Ascent first',!progress.mission3Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
@@ -1299,12 +1298,14 @@ function loop(now) {
   }
   if (scene==='landing' && lState.outcome==='playing') updateLandingPhysics(realDt);
   if (scene==='m3' && m3State.outcome==='playing') updateM3Physics(realDt);
+  if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
   if (scene==='title')        renderTitle();
   else if (scene==='orbit')   render();
   else if (scene==='landing') renderLanding();
   else if (scene==='m3')      renderM3();
+  else if (scene==='m4')      renderM4();
   transition.draw();
 
   requestAnimationFrame(loop);
@@ -1335,7 +1336,7 @@ function loop(now) {
 
 (function initOrientButtons() {
   function setMode(mode) {
-    const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
+    const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
     if (!tgt) return;
     tgt.orientMode=tgt.orientMode===mode?null:mode;
     document.getElementById('btn-prograde')?.classList.toggle('pressed',tgt.orientMode==='prograde');
@@ -1356,7 +1357,7 @@ function loop(now) {
     el.addEventListener('pointerdown',e=>{
       e.preventDefault();
       if (id==='btn-left'||id==='btn-right') {
-        const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
+        const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
         if (tgt) { tgt.orientMode=null; document.getElementById('btn-prograde')?.classList.remove('pressed'); document.getElementById('btn-retrograde')?.classList.remove('pressed'); }
       }
       setP(true);
@@ -1369,7 +1370,7 @@ function loop(now) {
   document.querySelectorAll('.warp-btn').forEach((btn,i)=>{
     btn.addEventListener('pointerdown',e=>{
       e.preventDefault();
-      const tgt=scene==='m3'?m3State:(scene==='landing'?lState:state);
+      const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
       if (tgt) tgt.warpIdx=i;
       document.querySelectorAll('.warp-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
     },{passive:false});
@@ -1381,7 +1382,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel);},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
@@ -1402,5 +1403,7 @@ rocket  = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 lRocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0 };
 m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
+m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0 };
+m4Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 
 requestAnimationFrame(loop);
