@@ -1496,6 +1496,7 @@ function resetM0() {
     message: 'IGNITION \u2014 BURN PROGRADE TO REACH ORBIT',
     trail: [], stableTimer: 0, stage: 1,
     stage1: null, // falling stage object {x,y,vx,vy}
+    launched: false,
   };
   m0Rocket = { x: CX, y: H-30, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
   document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
@@ -1531,13 +1532,14 @@ function updateM0Physics(realDt) {
 
     // Thrust
     var thrust=m0State.stage===1?M0_THRUST*1.6:M0_THRUST;
-    if (thr) {
+    if (thr) { m0State.launched=true;
       m0Rocket.vx+=Math.cos(m0Rocket.angle)*thrust*dt;
       m0Rocket.vy+=Math.sin(m0Rocket.angle)*thrust*dt;
       m0Rocket.fuel=Math.max(0,m0Rocket.fuel-FUEL_DRAIN*(thrust/THRUST)*dt);
     }
 
-    // Gravity toward Earth center below canvas
+    // Gravity toward Earth center below canvas (only after launched)
+    if (!m0State.launched) { m0Rocket.vx=0; m0Rocket.vy=0; }
     var dx=CX-m0Rocket.x, dy=(H + M0_EARTH_R - 30)-m0Rocket.y;
     var dist2=dx*dx+dy*dy, dist=Math.sqrt(dist2);
     var gA=M0_GM/Math.max(dist2,1e6);
@@ -1602,6 +1604,7 @@ function m0AltRocket() {
 }
 
 function evalM0State(alt) {
+  if (!m0State.launched) return;
   if (alt<0) return endM0('lose','CRASHED INTO EARTH');
   if (alt>M0_ORBIT_MAX+500&&m0Rocket.fuel<=0) return endM0('lose','OUT OF FUEL');
   if (m0Rocket.y<-200) return endM0('lose','LOST IN SPACE');
