@@ -1843,6 +1843,21 @@ function drawM0OutcomeBanner(){
   drawOutcomeBanner(m0State.outcome,m0State.message,{retryKey:'retryM0',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  ORBIT ACHIEVED',winLine2:'STAGE 1 SEPARATED — MISSION COMPLETE',hint:'Pitch over after launch to go downrange'});
 }
 
+var _bottomBar, _leftCtrl, _rightCtrl;
+function initTouchUI() {
+  _bottomBar = document.querySelector('.bottom-bar');
+  _leftCtrl  = document.querySelector('.side-ctrl.left-ctrl');
+  _rightCtrl = document.querySelector('.side-ctrl.right-ctrl');
+  setTouchUIVisible(false);
+}
+function setTouchUIVisible(vis) {
+  [_bottomBar, _leftCtrl, _rightCtrl].forEach(function(el){
+    if (!el) return;
+    if (vis) el.classList.remove('hidden');
+    else     el.classList.add('hidden');
+  });
+}
+
 let lastNow = null;
 
 function loop(now) {
@@ -1891,18 +1906,7 @@ function loop(now) {
   const menuBtn=document.getElementById('btn-menu');
   if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')scene='title';},{passive:false});
 
-  // Cache touch UI elements
-  const _bottomBar  = document.querySelector('.bottom-bar');
-  const _leftCtrl   = document.querySelector('.side-ctrl.left-ctrl');
-  const _rightCtrl  = document.querySelector('.side-ctrl.right-ctrl');
-  function setTouchUIVisible(vis) {
-    [_bottomBar, _leftCtrl, _rightCtrl].forEach(el => {
-      if (!el) return;
-      if (vis) el.classList.remove('hidden');
-      else     el.classList.add('hidden');
-    });
-  }
-  setTouchUIVisible(false); // start on title
+  initTouchUI();
   function onFSChange() { const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement); btn.textContent=inFS?'\u2715':'\u26f6'; btn.style.display=inFS?'none':''; }
   document.addEventListener('fullscreenchange',onFSChange); document.addEventListener('webkitfullscreenchange',onFSChange);
 })();
