@@ -131,9 +131,31 @@ function handleCanvasClick(e) {
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
-      const moon     = moonXY(state.moonAngle);
-      const relAngle = Math.atan2(rocket.y - moon.y, rocket.x - moon.x);
-      orbitHandoff   = { relAngle, fuel: rocket.fuel };
+      const moon    = moonXY(state.moonAngle);
+      const relX    = rocket.x - moon.x;
+      const relY    = rocket.y - moon.y;
+      const relDist = Math.hypot(relX, relY);
+
+      // Moon velocity in world frame (tangent to orbit)
+      const moonVx = -Math.sin(state.moonAngle) * MOON_ORBIT * MOON_OMEGA;
+      const moonVy =  Math.cos(state.moonAngle) * MOON_ORBIT * MOON_OMEGA;
+
+      // Rocket velocity relative to Moon
+      const relVx = rocket.vx - moonVx;
+      const relVy = rocket.vy - moonVy;
+      const relSpeed = Math.hypot(relVx, relVy);
+
+      // Speed ratio vs circular orbit speed at current Moon distance
+      const circSpeedM1 = Math.sqrt(G * MOON_MASS / Math.max(relDist, 1));
+      const speedRatio  = relSpeed / circSpeedM1;
+
+      orbitHandoff = {
+        relAngle: Math.atan2(relY, relX),
+        speedRatio: Math.min(speedRatio, 2.5),
+        vDirX: relSpeed > 0 ? relVx / relSpeed : 0,
+        vDirY: relSpeed > 0 ? relVy / relSpeed : 1,
+        fuel: rocket.fuel,
+      };
       scene = 'landing';
       resetLanding(orbitHandoff);
     }
@@ -222,16 +244,32 @@ function resetLanding(handoff) {
   const startFuel  = handoff ? handoff.fuel     : 100;
   const lx = CX + Math.cos(startAngle) * LAND_ORBIT_R;
   const ly = CY + Math.sin(startAngle) * LAND_ORBIT_R;
-  const vCirc = Math.sqrt(G * MOON_MASS / LAND_ORBIT_R);
+
+  // Circular orbit speed at LAND_ORBIT_R
+  const vCircM2 = Math.sqrt(G * MOON_MASS / LAND_ORBIT_R);
+
+  let vx, vy, startRocketAngle;
+  if (handoff && handoff.vDirX !== undefined) {
+    // True handoff: preserve velocity direction + speed ratio from Mission 1
+    const speed = vCircM2 * handoff.speedRatio;
+    vx = handoff.vDirX * speed;
+    vy = handoff.vDirY * speed;
+    startRocketAngle = Math.atan2(vy, vx);
+  } else {
+    // Direct launch: clean circular orbit
+    vx = -Math.sin(startAngle) * vCircM2;
+    vy =  Math.cos(startAngle) * vCircM2;
+    startRocketAngle = startAngle + Math.PI / 2;
+  }
 
   lState = {
     warpIdx: 0, orientMode: 'prograde', outcome: 'playing',
-    message: 'IN LUNAR ORBIT \u2014 INITIATE DESCENT', trail: [], fromOrbit: !!handoff,
+    message: handoff ? 'IN LUNAR ORBIT \u2014 INITIATE DESCENT' : 'IN LUNAR ORBIT \u2014 INITIATE DESCENT',
+    trail: [], fromOrbit: !!handoff,
   };
   lRocket = {
-    x: lx, y: ly,
-    vx: -Math.sin(startAngle)*vCirc, vy: Math.cos(startAngle)*vCirc,
-    angle: startAngle + Math.PI / 2, fuel: startFuel,
+    x: lx, y: ly, vx, vy,
+    angle: startRocketAngle, fuel: startFuel,
   };
 
   document.getElementById('btn-prograde')?.classList.toggle('pressed', true);
