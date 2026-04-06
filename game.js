@@ -341,7 +341,7 @@ function resetLanding(handoff) {
 // M3 RESET
 // ════════════════════════════════════════════════════════════════════════════
 
-function resetM3() {
+function resetM3(startFuel = 100) {
   collisionFilter.reset(); pathLengthFilter.reset();
   uiHitBoxes.retryM3 = null; uiHitBoxes.backToTitle = null;
   const padX = CX + Math.cos(PAD_ANGLE) * (LAND_MOON_R + 8);
@@ -353,7 +353,7 @@ function resetM3() {
   };
   m3Rocket = {
     x: padX, y: padY, vx: 0, vy: 0,
-    angle: PAD_ANGLE, fuel: 100,  // pointing away from surface (radially outward)
+    angle: PAD_ANGLE, fuel: startFuel,
   };
   document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
@@ -548,7 +548,8 @@ function evalLandingState(distToMoon) {
     if (onPad&&spd<=LAND_SPEED_MAX) {
       endLanding('win','TOUCHDOWN! MISSION COMPLETE');
       progress.unlockMission2();
-      transition.start(()=>{ scene='m3'; resetM3(); });
+      const _m3Fuel = lRocket.fuel;
+      transition.start(()=>{ scene='m3'; resetM3(_m3Fuel); });
       return;
     }
     if (!onPad) return endLanding('lose','MISSED THE LANDING PAD');
