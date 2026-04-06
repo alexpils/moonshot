@@ -1864,7 +1864,6 @@ function loop(now) {
 
   // Show/hide menu button + touch controls based on scene
   { const mb=document.getElementById('btn-menu');
-    if (mb) mb.classList.toggle('hidden', scene==='title');
     const onTitle = scene==='title';
     document.querySelector('.bottom-bar')?.classList.toggle('hidden', onTitle);
     document.querySelector('.side-ctrl.left-ctrl')?.classList.toggle('hidden', onTitle);

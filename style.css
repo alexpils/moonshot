@@ -161,6 +161,7 @@ canvas {
   /* Keep side panels but hide the touch-only move buttons */
   .move-btn    { display: none; }
   .bottom-bar  { display: none; }
+  .fullscreen-btn { display: flex; }
   :root        { --bottom-h: 0px; }
   .game-shell  { padding: 4px; }
   canvas       { max-height: 100vh; border-radius: 18px; }
@@ -174,6 +175,7 @@ canvas {
 
 /* ── Fullscreen button ── */
 .fullscreen-btn {
+  display: none;
   position: fixed;
   top: 10px;
   left: 10px;
