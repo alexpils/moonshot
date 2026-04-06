@@ -900,28 +900,30 @@ function renderTitle() {
       glow.addColorStop(0,'rgba(100,140,255,0.08)'); glow.addColorStop(1,'rgba(100,140,255,0)');
       ctx.fillStyle=glow; rrect(x,y,w,h,18); ctx.fill();
     }
-    ctx.font='80px sans-serif'; ctx.fillStyle=locked?'rgba(150,160,200,0.3)':'rgba(255,255,255,0.9)'; ctx.textAlign='left'; ctx.fillText(icon,x+30,y+90);
-    ctx.font='600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(80,100,160,0.4)':'rgba(100,160,255,0.7)'; ctx.textAlign='right'; ctx.fillText('MISSION '+num,x+w-24,y+36);
-    ctx.font='800 44px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.35)':'#c8d8f8'; ctx.textAlign='left'; ctx.fillText(title2,x+30,y+132);
-    ctx.font='400 26px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.4)':'rgba(148,175,220,0.7)'; ctx.fillText(sub,x+30,y+170);
+    // Scale fonts proportionally to card width (base: w=680)
+    var fs=w/680;
+    ctx.font=Math.round(64*fs)+'px sans-serif'; ctx.fillStyle=locked?'rgba(150,160,200,0.3)':'rgba(255,255,255,0.9)'; ctx.textAlign='left'; ctx.fillText(icon,x+24,y+h*0.46);
+    ctx.font='600 '+Math.round(18*fs)+'px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(80,100,160,0.4)':'rgba(100,160,255,0.7)'; ctx.textAlign='right'; ctx.fillText('MISSION '+num,x+w-18,y+h*0.2);
+    ctx.font='800 '+Math.round(34*fs)+'px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.35)':'#c8d8f8'; ctx.textAlign='left'; ctx.fillText(title2,x+24,y+h*0.68);
+    ctx.font='400 '+Math.round(19*fs)+'px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.4)':'rgba(148,175,220,0.7)'; ctx.fillText(sub,x+24,y+h*0.88);
     ctx.restore();
   }
 
-  // 5-card layout (00-04)
-  // 6-card layout (00-05)
-  var c5W=370,c5gap=28,c5total=c5W*6+c5gap*5,c5start=CX-c5total/2;
-  function c5x(i){return c5start+i*(c5W+c5gap);}
-  drawCard('mission0',c5x(0),cardY,c5W,cardH,'\uD83D\uDE80','00','LAUNCH',          'Launch from Earth to orbit', false);
-  drawCard('mission1',c5x(1),cardY,c5W,cardH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
-  drawCard('mission2',c5x(2),cardY,c5W,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING', progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first',!progress.mission1Beaten);
-  drawCard('mission3',c5x(3),cardY,c5W,cardH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',  progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
-  drawCard('mission4',c5x(4),cardY,c5W,cardH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',   progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first',!progress.mission3Beaten);
-  drawCard('mission5',c5x(5),cardY,c5W,cardH,'\uD83D\uDD12','05','REENTRY','Coming soon…',true);
+  // 2-row grid layout: 3 cards per row
+  var cW=680, cH=210, cGapX=40, cGapY=28;
+  var row1Y=CY-cH-cGapY/2-30, row2Y=CY+cGapY/2-30;
+  var totalW=cW*3+cGapX*2, col0=CX-totalW/2, col1=col0+cW+cGapX, col2=col1+cW+cGapX;
+  drawCard('mission0',col0,row1Y,cW,cH,'\uD83D\uDE80','00','LAUNCH',            'Launch from Earth to orbit', false);
+  drawCard('mission1',col1,row1Y,cW,cH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
+  drawCard('mission2',col2,row1Y,cW,cH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING', progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first',!progress.mission1Beaten);
+  drawCard('mission3',col0,row2Y,cW,cH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',  progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
+  drawCard('mission4',col1,row2Y,cW,cH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',   progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first',!progress.mission3Beaten);
+  drawCard('mission5',col2,row2Y,cW,cH,'\uD83D\uDD12','05','REENTRY',           'Coming soon…', true);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(100,130,180,0.5)';
-  ctx.fillText('A/D \u00b7 Rotate   \u2003W/Space \u00b7 Thrust   \u2003E \u00b7 Prograde   \u2003Q \u00b7 Retrograde   \u20031\u20134 \u00b7 Warp   \u2003R \u00b7 Restart',CX,cardY+cardH+55);
+  ctx.fillText('A/D \u00b7 Rotate   \u2003W/Space \u00b7 Thrust   \u2003E \u00b7 Prograde   \u2003Q \u00b7 Retrograde   \u20031\u20134 \u00b7 Warp   \u2003R \u00b7 Restart',CX,row2Y+cH+48);
   ctx.textAlign='left';
 }
 
