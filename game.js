@@ -110,6 +110,15 @@ const transition = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// PROGRESSION
+// ════════════════════════════════════════════════════════════════════════════
+
+const progress = {
+  get mission1Beaten() { return localStorage.getItem('moonshot_m1') === '1'; },
+  unlockMission1()     { localStorage.setItem('moonshot_m1', '1'); },
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // INPUT
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -163,7 +172,7 @@ function handleCanvasClick(e) {
 
   if (scene === 'title') {
     if (hit(uiHitBoxes.mission1)) { scene = 'orbit'; resetGame(); }
-    if (hit(uiHitBoxes.mission2)) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
+    if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -436,6 +445,7 @@ function evalState(dEarth,dMoon,realDt) {
         vDirY: _relSpeed>0?_relVy/_relSpeed:1,
         fuel: rocket.fuel,
       };
+      progress.unlockMission1();
       transition.start(() => {
         scene = 'landing';
         resetLanding(orbitHandoff);
@@ -643,23 +653,26 @@ function renderTitle() {
   const cardW=560,cardH=230,gap=60,totalW=cardW*2+gap,cardY=CY+20;
   const card1X=CX-totalW/2, card2X=CX-totalW/2+cardW+gap;
 
-  function drawCard(key,x,y,w,h,icon,num,title2,sub) {
+  function drawCard(key,x,y,w,h,icon,num,title2,sub,locked=false) {
     registerBtn(key,x,y,w,h);
     ctx.save();
-    ctx.fillStyle='rgba(12,18,40,0.88)'; ctx.strokeStyle='rgba(120,160,255,0.35)'; ctx.lineWidth=1.5;
+    ctx.fillStyle=locked?'rgba(8,12,28,0.88)':'rgba(12,18,40,0.88)';
+    ctx.strokeStyle=locked?'rgba(60,80,130,0.3)':'rgba(120,160,255,0.35)'; ctx.lineWidth=1.5;
     rrect(x,y,w,h,18); ctx.fill(); ctx.stroke();
-    const glow=ctx.createLinearGradient(x,y,x,y+h);
-    glow.addColorStop(0,'rgba(100,140,255,0.08)'); glow.addColorStop(1,'rgba(100,140,255,0)');
-    ctx.fillStyle=glow; rrect(x,y,w,h,18); ctx.fill();
-    ctx.font='80px sans-serif'; ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='left'; ctx.fillText(icon,x+30,y+90);
-    ctx.font='600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(100,160,255,0.7)'; ctx.textAlign='right'; ctx.fillText('MISSION '+num,x+w-24,y+36);
-    ctx.font='800 44px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='#c8d8f8'; ctx.textAlign='left'; ctx.fillText(title2,x+30,y+132);
-    ctx.font='400 26px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText(sub,x+30,y+170);
+    if (!locked) {
+      const glow=ctx.createLinearGradient(x,y,x,y+h);
+      glow.addColorStop(0,'rgba(100,140,255,0.08)'); glow.addColorStop(1,'rgba(100,140,255,0)');
+      ctx.fillStyle=glow; rrect(x,y,w,h,18); ctx.fill();
+    }
+    ctx.font='80px sans-serif'; ctx.fillStyle=locked?'rgba(150,160,200,0.3)':'rgba(255,255,255,0.9)'; ctx.textAlign='left'; ctx.fillText(icon,x+30,y+90);
+    ctx.font='600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(80,100,160,0.4)':'rgba(100,160,255,0.7)'; ctx.textAlign='right'; ctx.fillText('MISSION '+num,x+w-24,y+36);
+    ctx.font='800 44px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.35)':'#c8d8f8'; ctx.textAlign='left'; ctx.fillText(title2,x+30,y+132);
+    ctx.font='400 26px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=locked?'rgba(120,130,170,0.4)':'rgba(148,175,220,0.7)'; ctx.fillText(sub,x+30,y+170);
     ctx.restore();
   }
 
-  drawCard('mission1',card1X,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon');
-  drawCard('mission2',card2X,cardY,cardW,cardH,'\uD83C\uDF15','02','LUNAR LANDING','Land softly on the Moon\'s surface');
+  drawCard('mission1',card1X,cardY,cardW,cardH,'\uD83C\uDF0D','01','LUNAR ORBIT','Achieve stable orbit around the Moon',false);
+  drawCard('mission2',card2X,cardY,cardW,cardH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',progress.mission1Beaten?'Land softly on the Moon\'s surface':'Complete Lunar Orbit first',!progress.mission1Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
