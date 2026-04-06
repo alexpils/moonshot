@@ -214,6 +214,7 @@ canvas {
 }
 .menu-btn:active { background: rgba(59,130,246,0.5); }
 .menu-btn.hidden { display: none; }
+.bottom-bar.hidden, .side-ctrl.hidden { display: none !important; }
 
 
 /* Hide fullscreen button on desktop (less needed, keyboard F11 works) */

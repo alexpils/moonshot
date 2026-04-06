@@ -1862,9 +1862,14 @@ function loop(now) {
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
-  // Show/hide menu button
+  // Show/hide menu button + touch controls based on scene
   { const mb=document.getElementById('btn-menu');
-    if (mb) mb.classList.toggle('hidden', scene==='title'); }
+    if (mb) mb.classList.toggle('hidden', scene==='title');
+    const onTitle = scene==='title';
+    document.querySelector('.bottom-bar')?.classList.toggle('hidden', onTitle);
+    document.querySelector('.side-ctrl.left-ctrl')?.classList.toggle('hidden', onTitle);
+    document.querySelector('.side-ctrl.right-ctrl')?.classList.toggle('hidden', onTitle);
+  }
   if (scene==='title')        renderTitle();
   else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
