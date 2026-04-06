@@ -34,7 +34,7 @@ const LAND_ESCAPE    = 960;
 // Mission 0 — Launch to orbit (ballistic feel, no orbital mechanics)
 const M0_EARTH_R    = 24000;  // visual only — for Earth arc rendering
 const M0_GRAVITY    = 80;    // constant downward pull (u/s²)
-const M0_DRAG_CD    = 18;     // atmospheric drag coefficient
+const M0_DRAG_CD    = 5;     // atmospheric drag coefficient
 const M0_ATMO_SCALE = 350;    // drag halves every 350u altitude
 const M0_TARGET_MIN = 200;    // target altitude band (canvas pixels above pad)
 const M0_TARGET_MAX = 600;
@@ -1671,28 +1671,32 @@ function renderM0() {
 function drawM0Rocket() {
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
   ctx.save(); ctx.translate(m0Rocket.x,m0Rocket.y); ctx.rotate(m0Rocket.angle);
-  // ctx.rotate(-PI/2): local +x = UP on canvas (nose), local -x = DOWN (tail, toward Earth)
+  // local +x = UP on canvas (nose direction), local -x = DOWN (tail/Earth)
+  // Translate to center of mass so rotation feels natural
+  // Stage 1 attached: spans -42..+16 = 58u, CM at midpoint -13 → shift +13
+  // Stage 2 only:     spans  -6..+16 = 22u, CM at midpoint  +5 → shift  -5
+  ctx.translate(m0State.stage===1 ? 13 : -5, 0);
 
-  // Stage 1 body — tail direction = local -x (downward toward Earth)
+  // Stage 1 body (tail direction = -x, toward Earth)
   if (m0State.stage===1) {
     ctx.fillStyle='#64748b';
-    ctx.fillRect(-34,-5,28,10);    // cylinder from -34 to -6
+    ctx.fillRect(-34,-5,28,10);
     ctx.fillStyle='#475569';
-    ctx.beginPath(); ctx.moveTo(-34,-5); ctx.lineTo(-42,-8); ctx.lineTo(-42,8); ctx.lineTo(-34,5); ctx.closePath(); ctx.fill(); // nozzle bell
-    ctx.fillStyle='#94a3b8'; ctx.fillRect(-8,-6,4,12); // interstage ring
+    ctx.beginPath(); ctx.moveTo(-34,-5); ctx.lineTo(-42,-8); ctx.lineTo(-42,8); ctx.lineTo(-34,5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#94a3b8'; ctx.fillRect(-8,-6,4,12);
   }
 
-  // Exhaust — shoots downward out of tail (-x direction, further negative)
+  // Exhaust flame (shoots out -x tail, further negative)
   if (thr) {
-    var fl=20+Math.random()*14;
-    var x0=m0State.stage===1?-42:-6; // exit of nozzle
+    var fl=22+Math.random()*16;
+    var x0=m0State.stage===1?-42:-6;
     ctx.fillStyle='rgba(251,146,60,'+(0.7+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(x0,-4); ctx.lineTo(x0-fl,0); ctx.lineTo(x0,4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x0,-5); ctx.lineTo(x0-fl,0); ctx.lineTo(x0,5); ctx.closePath(); ctx.fill();
     ctx.fillStyle='rgba(253,224,71,'+(0.5+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(x0,-2); ctx.lineTo(x0-fl*0.5,0); ctx.lineTo(x0,2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x0,-2); ctx.lineTo(x0-fl*0.55,0); ctx.lineTo(x0,2); ctx.closePath(); ctx.fill();
   }
 
-  // Upper stage capsule — nose in +x direction (upward)
+  // Upper stage capsule (nose at +x, upward)
   ctx.fillStyle='#f1f5f9';
   ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-4,-6); ctx.lineTo(-4,6); ctx.closePath(); ctx.fill();
   ctx.fillStyle='rgba(255,255,255,0.4)';
@@ -1700,7 +1704,6 @@ function drawM0Rocket() {
 
   ctx.restore();
 }
-
 function drawM0HUD() {
   var speed=Math.hypot(m0Rocket.vx,m0Rocket.vy);
   var alt=m0AltRocket();
