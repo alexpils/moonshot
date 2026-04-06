@@ -30,8 +30,8 @@ const PAD_HALF       = 0.30;
 const PAD_ANGLE      = Math.PI / 2;
 const LAND_ESCAPE    = 960;
 
-const M3_ORBIT_MIN  = 360;
-const M3_ORBIT_MAX  = 500;
+const M3_ORBIT_MIN  = 440;
+const M3_ORBIT_MAX  = 540;
 const M3_HOLD       = 30;
 const M3_THRUST     = 110;
 
