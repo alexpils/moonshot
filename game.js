@@ -89,7 +89,8 @@ const LAND_CRATERS = [
 // SCENE MANAGEMENT
 // ════════════════════════════════════════════════════════════════════════════
 
-let scene = 'title'; // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4'
+let scene = 'title';
+let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
@@ -189,6 +190,12 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => keys.delete(e.code));
 
 canvas.addEventListener('pointerdown', function(e){e.preventDefault();handleCanvasClick(e);},{passive:false});
+canvas.addEventListener('pointermove', function(e){
+  if (scene!=='title') return;
+  const rect=canvas.getBoundingClientRect();
+  titleMouse.x=(e.clientX-rect.left)*(canvas.width/rect.width);
+  titleMouse.y=(e.clientY-rect.top)*(canvas.height/rect.height);
+},{passive:true});
 
 function handleCanvasClick(e) {
   const rect   = canvas.getBoundingClientRect();
@@ -858,7 +865,14 @@ function renderTitle() {
   bg.addColorStop(0,'#080e22'); bg.addColorStop(1,'#020610');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-  for (const s of STARS) { ctx.globalAlpha=s.a; ctx.fillStyle='#dbeafe'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
+  // Stars with mouse parallax on desktop, fixed on touch
+  { const ox=(titleMouse.x-CX)*0.04, oy=(titleMouse.y-CY)*0.04;
+    for (const s of STARS) {
+      const sx=((s.x-ox*s.depth)%W+W)%W, sy=((s.y-oy*s.depth)%H+H)%H;
+      ctx.globalAlpha=s.a; ctx.fillStyle='#dbeafe';
+      ctx.beginPath(); ctx.arc(sx,sy,s.r,0,Math.PI*2); ctx.fill();
+    }
+  }
   ctx.globalAlpha=1;
 
   ctx.textAlign='center';
