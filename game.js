@@ -33,11 +33,11 @@ const LAND_ESCAPE    = 960;
 
 // Mission 0 — Launch to orbit (ballistic feel, no orbital mechanics)
 const M0_EARTH_R    = 24000;  // visual only — for Earth arc rendering
-const M0_GRAVITY    = 80;    // constant downward pull (u/s²)
-const M0_DRAG_CD    = 5;     // atmospheric drag coefficient
+const M0_GRAVITY    = 320;   // constant downward pull (u/s²)
+const M0_DRAG_CD    = 2;     // atmospheric drag coefficient
 const M0_ATMO_SCALE = 350;    // drag halves every 350u altitude
-const M0_TARGET_MIN = 350;    // target altitude band (canvas pixels above pad)
-const M0_TARGET_MAX = 750;
+const M0_TARGET_MIN = 800;   // target altitude band
+const M0_TARGET_MAX = 1400;
 const M0_HORIZ_MIN  = 0.75;   // must be 75% horizontal to win
 const M0_HOLD       = 15;     // seconds to hold in band
 const M0_STAGE_SPLIT = 50;    // stage sep at 50% fuel
@@ -246,6 +246,10 @@ function handleCanvasClick(e) {
   }
   if (scene === 'm3') {
     if (hit(uiHitBoxes.retryM3))    resetM3(m3EntryFuel);
+    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+  }
+  if (scene === 'm0') {
+    if (hit(uiHitBoxes.retryM0))     resetM0();
     if (hit(uiHitBoxes.backToTitle)) scene = 'title';
   }
   if (scene === 'm4') {
