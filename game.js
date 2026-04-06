@@ -611,31 +611,32 @@ function updateM3Physics(realDt) {
       m3State.trail.push({x:m3Rocket.x,y:m3Rocket.y});
       if (m3State.trail.length>TRAIL_MAX) m3State.trail.shift();
     }
-    evalM3State(gM.dist, realDt);
+    evalM3State(gM.dist);
+  }
+  // Accumulate hold timer once per frame (not per substep)
+  if (m3State.outcome==='playing') {
+    if (m3State._inBand) { m3State.stableTimer+=realDt; }
+    else { m3State.stableTimer=0; }
+    if (m3State.stableTimer>=M3_HOLD&&!transition.active) {
+      endM3('win','MISSION COMPLETE');
+      progress.unlockMission3();
+      var _m4f=m3Rocket.fuel; m4EntryFuel=_m4f;
+      transition.start(function(){scene='m4';resetM4(_m4f);});
+    }
   }
 }
 
-function evalM3State(dist, dt) {
-  if (!m3State.launched) return; // sitting on surface, no collision
+function evalM3State(dist) {
+  if (!m3State.launched) return;
   if (dist<LAND_MOON_R+4) return endM3('lose','CRASHED INTO THE MOON');
   if (dist>LAND_ESCAPE)   return endM3('lose','LOST IN SPACE');
   if (m3Rocket.fuel<=0&&(dist<M3_ORBIT_MIN||dist>M3_ORBIT_MAX)) return endM3('lose','OUT OF FUEL');
 
-  const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
-  if (inBand) {
-    m3State.stableTimer+=realDt;
+  m3State._inBand = dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
+  if (m3State._inBand) {
     const rem=Math.max(0,M3_HOLD-m3State.stableTimer);
     m3State.message=rem>0?'HOLDING ORBIT\u2026':'ORBIT ESTABLISHED!';
-    if (m3State.stableTimer>=M3_HOLD) {
-      endM3('win','MISSION COMPLETE');
-      progress.unlockMission3();
-      const _m4Fuel = m3Rocket.fuel;
-      m4EntryFuel = _m4Fuel;
-      transition.start(()=>{
-        scene='m4';
-        resetM4(_m4Fuel);
-      });
-    }
+    // win handled per-frame in updateM3Physics
   } else {
     m3State.stableTimer=0;
     const alt=dist-LAND_MOON_R;
@@ -1317,7 +1318,6 @@ function evalM4State(dE,dM,dt) {
   if (m4Rocket.fuel<=0&&dE>M4_STABLE_R) return endM4('lose','OUT OF FUEL');
   var inB=dE>=M4_STABLE_MIN&&dE<=M4_STABLE_R;
   if (inB) {
-    m4State.stableTimer+=realDt;
     var rem=Math.max(0,STABLE_HOLD-m4State.stableTimer);
     m4State.message=rem>0?'HOLDING EARTH ORBIT\u2026':'EARTH ORBIT ACHIEVED!';
     if (m4State.stableTimer>=STABLE_HOLD){endM4('win','MISSION COMPLETE');transition.start(function(){scene='title';});}
@@ -1352,7 +1352,7 @@ function updateM4Physics(realDt) {
     m4Rocket.vx+=(gE.ax+gM.ax)*dt;m4Rocket.vy+=(gE.ay+gM.ay)*dt;m4Rocket.x+=m4Rocket.vx*dt;m4Rocket.y+=m4Rocket.vy*dt;
     var last=m4State.trail[m4State.trail.length-1];
     if (!last||Math.hypot(m4Rocket.x-last.x,m4Rocket.y-last.y)>3){m4State.trail.push({x:m4Rocket.x,y:m4Rocket.y});if(m4State.trail.length>TRAIL_MAX)m4State.trail.shift();}
-    evalM4State(gE.dist,gM.dist,realDt);
+    evalM4State(gE.dist,gM.dist);
   }
 }
 
