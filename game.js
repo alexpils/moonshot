@@ -344,8 +344,8 @@ function resetLanding(handoff) {
 function resetM3() {
   collisionFilter.reset(); pathLengthFilter.reset();
   uiHitBoxes.retryM3 = null; uiHitBoxes.backToTitle = null;
-  const padX = CX + Math.cos(PAD_ANGLE) * LAND_MOON_R;
-  const padY = CY + Math.sin(PAD_ANGLE) * LAND_MOON_R;
+  const padX = CX + Math.cos(PAD_ANGLE) * (LAND_MOON_R + 8);
+  const padY = CY + Math.sin(PAD_ANGLE) * (LAND_MOON_R + 8);
   m3State = {
     warpIdx: 0, orientMode: null, outcome: 'playing',
     message: 'LAUNCH FROM THE MOON \u2014 ESTABLISH ORBIT',
@@ -1134,6 +1134,7 @@ function drawLandingHUD() {
 
 function drawLandingOutcomeBanner() {
   if (lState.outcome==='playing') return;
+  if (lState.outcome==='win') return; // seamless transition handles win
   const isWin=lState.outcome==='win';
   const okCol=isWin?'#86efac':'#fca5a5';
   const bw=500, bh=isWin?160:180, bx=W/2-bw/2, by=H/2-bh/2;
