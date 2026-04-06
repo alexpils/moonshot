@@ -545,7 +545,12 @@ function evalLandingState(distToMoon) {
     let diff=ta-PAD_ANGLE;
     while (diff>Math.PI) diff-=2*Math.PI; while (diff<-Math.PI) diff+=2*Math.PI;
     const onPad=Math.abs(diff)<PAD_HALF;
-    if (onPad&&spd<=LAND_SPEED_MAX) return endLanding('win','TOUCHDOWN! MISSION COMPLETE');
+    if (onPad&&spd<=LAND_SPEED_MAX) {
+      endLanding('win','TOUCHDOWN! MISSION COMPLETE');
+      progress.unlockMission2();
+      transition.start(()=>{ scene='m3'; resetM3(); });
+      return;
+    }
     if (!onPad) return endLanding('lose','MISSED THE LANDING PAD');
     return endLanding('lose',`TOO FAST \u2014 ${spd.toFixed(0)} u/s`);
   }
