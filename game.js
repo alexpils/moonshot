@@ -877,15 +877,15 @@ function renderTitle() {
 
   ctx.textAlign='center';
   ctx.font='800 160px Inter,ui-sans-serif,sans-serif';
-  ctx.fillStyle='rgba(200,216,255,0.08)'; ctx.fillText('MOONSHOT',CX,CY-120);
+  ctx.fillStyle='rgba(200,216,255,0.08)'; ctx.fillText('MOONSHOT',CX,200);
 
   ctx.font='800 110px Inter,ui-sans-serif,sans-serif';
   const tg=ctx.createLinearGradient(CX-400,0,CX+400,0);
   tg.addColorStop(0,'#60a5fa'); tg.addColorStop(0.5,'#c8d8f8'); tg.addColorStop(1,'#818cf8');
-  ctx.fillStyle=tg; ctx.fillText('MOONSHOT',CX,CY-120);
+  ctx.fillStyle=tg; ctx.fillText('MOONSHOT',CX,200);
 
   ctx.font='400 38px Inter,ui-sans-serif,sans-serif';
-  ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,CY-50);
+  ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,270);
 
   const cardW=420,cardH=230,cardY=CY+20;
 
@@ -911,7 +911,7 @@ function renderTitle() {
 
   // 2-row grid layout: 3 cards per row
   var cW=680, cH=210, cGapX=40, cGapY=28;
-  var row1Y=CY-cH-cGapY/2-30, row2Y=CY+cGapY/2-30;
+  var row1Y=320, row2Y=320+cH+cGapY;
   var totalW=cW*3+cGapX*2, col0=CX-totalW/2, col1=col0+cW+cGapX, col2=col1+cW+cGapX;
   drawCard('mission0',col0,row1Y,cW,cH,'\uD83D\uDE80','00','LAUNCH',            'Launch from Earth to orbit', false);
   drawCard('mission1',col1,row1Y,cW,cH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
