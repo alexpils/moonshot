@@ -73,6 +73,41 @@ let scene = 'title'; // 'title' | 'orbit' | 'landing'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 
+// Fade transition state
+const transition = {
+  active: false,
+  alpha: 0,       // 0 = transparent, 1 = full black
+  phase: 'idle',  // 'fade-out' | 'hold' | 'fade-in'
+  holdTimer: 0,
+  onMid: null,    // callback fired when screen is fully black
+  start(onMid) {
+    this.active = true; this.alpha = 0; this.phase = 'fade-out';
+    this.holdTimer = 0; this.onMid = onMid;
+  },
+  update(dt) {
+    if (!this.active) return;
+    if (this.phase === 'fade-out') {
+      this.alpha = Math.min(1, this.alpha + dt * 2.2);
+      if (this.alpha >= 1) { this.phase = 'hold'; this.holdTimer = 0; if (this.onMid) { this.onMid(); this.onMid = null; } }
+    } else if (this.phase === 'hold') {
+      this.holdTimer += dt;
+      if (this.holdTimer > 0.35) this.phase = 'fade-in';
+    } else if (this.phase === 'fade-in') {
+      this.alpha = Math.max(0, this.alpha - dt * 1.6);
+      if (this.alpha <= 0) { this.active = false; this.phase = 'idle'; }
+    }
+  },
+  draw() {
+    if (!this.active && this.alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  },
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 // INPUT
 // ════════════════════════════════════════════════════════════════════════════
@@ -382,7 +417,29 @@ function evalState(dEarth,dMoon,realDt) {
     state.stableTimer+=realDt;
     const rem=Math.max(0,STABLE_HOLD-state.stableTimer);
     state.message=rem>0?'HOLDING LUNAR ORBIT\u2026':'STABLE LUNAR ORBIT ACHIEVED!';
-    if (state.stableTimer>=STABLE_HOLD) end('win','LUNAR ORBIT ACHIEVED');
+    if (state.stableTimer>=STABLE_HOLD) {
+      end('win','LUNAR ORBIT ACHIEVED');
+      // Capture handoff immediately and begin seamless transition
+      const _moon   = moonXY(state.moonAngle);
+      const _relX   = rocket.x - _moon.x, _relY = rocket.y - _moon.y;
+      const _relDist = Math.hypot(_relX, _relY);
+      const _moonVx = -Math.sin(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
+      const _moonVy =  Math.cos(state.moonAngle)*MOON_ORBIT*MOON_OMEGA;
+      const _relVx = rocket.vx-_moonVx, _relVy = rocket.vy-_moonVy;
+      const _relSpeed = Math.hypot(_relVx, _relVy);
+      const _circ = Math.sqrt(G*MOON_MASS/Math.max(_relDist,1));
+      orbitHandoff = {
+        relAngle: Math.atan2(_relY, _relX),
+        speedRatio: Math.min(_relSpeed/_circ, 2.5),
+        vDirX: _relSpeed>0?_relVx/_relSpeed:0,
+        vDirY: _relSpeed>0?_relVy/_relSpeed:1,
+        fuel: rocket.fuel,
+      };
+      transition.start(() => {
+        scene = 'landing';
+        resetLanding(orbitHandoff);
+      });
+    }
   } else {
     state.stableTimer=0;
     if (state.outcome==='playing') {
@@ -846,26 +903,18 @@ function drawCountdownOverlay() {
 }
 
 function drawOrbitOutcomeBanner() {
-  if (state.outcome==='playing') return;
-  const isWin=state.outcome==='win';
-  const okCol=isWin?'#86efac':'#fca5a5';
-  const bw=isWin?580:500, bh=isWin?180:170, bx=W/2-bw/2, by=H/2-bh/2;
+  // Win case: seamless transition fires automatically, no banner needed
+  if (state.outcome==='playing'||state.outcome==='win') return;
+  const okCol='#fca5a5';
+  const bw=500, bh=170, bx=W/2-bw/2, by=H/2-bh/2;
   ctx.save();
-  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle=isWin?'rgba(134,239,172,0.55)':'rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
+  ctx.fillStyle='rgba(6,10,24,0.95)'; ctx.strokeStyle='rgba(252,165,165,0.55)'; ctx.lineWidth=1.5;
   rrect(bx,by,bw,bh,18); ctx.fill(); ctx.stroke();
   ctx.textAlign='center';
-  if (isWin) {
-    ctx.font='800 30px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83C\uDF15  LUNAR ORBIT ACHIEVED',W/2,by+48);
-    ctx.font='600 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.8)'; ctx.fillText('Ready for descent? Or press R to retry.',W/2,by+82);
-    const btnY=by+bh-58;
-    drawCanvasBtn('beginDescent','Begin Descent \u2192',W/2-190,btnY,272,44,{fill:'rgba(20,60,30,0.95)',stroke:'rgba(134,239,172,0.7)',color:'#86efac',fs:'700 21px Inter,ui-sans-serif,sans-serif'});
-    drawCanvasBtn('backToTitle','\u2190 Menu',W/2+94,btnY,96,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 19px Inter,ui-sans-serif,sans-serif'});
-  } else {
-    ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
-    ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(state.message,W/2,by+86);
-    ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
-    drawCanvasBtn('backToTitle','\u2190 Menu',W/2-76,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
-  }
+  ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=okCol; ctx.fillText('\uD83D\uDCA5  MISSION FAILED',W/2,by+50);
+  ctx.font='700 20px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(252,165,165,0.8)'; ctx.fillText(state.message,W/2,by+86);
+  ctx.font='500 17px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,140,140,0.6)'; ctx.fillText('Press R to retry',W/2,by+116);
+  drawCanvasBtn('backToTitle','\u2190 Menu',W/2-76,by+bh-58,152,44,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
   ctx.textAlign='left'; ctx.restore();
 }
 
@@ -952,17 +1001,19 @@ function loop(now) {
   const realDt=Math.min((now-lastNow)/1000,0.05);
   lastNow=now;
 
-  if (scene==='orbit' && state.outcome==='playing') {
-    updatePhysics(realDt);
+  if (scene==='orbit') {
+    if (state.outcome==='playing') updatePhysics(realDt);
     const inOrbit=state.stableTimer>0;
     camera.blend += ((inOrbit?1.0:0.0)-camera.blend)*0.006;
     camera.zoom = 1.0+1.2*camera.blend;
   }
   if (scene==='landing' && lState.outcome==='playing') updateLandingPhysics(realDt);
+  transition.update(realDt);
 
   if (scene==='title')   renderTitle();
   else if (scene==='orbit')   render();
   else if (scene==='landing') renderLanding();
+  transition.draw();
 
   requestAnimationFrame(loop);
 }
