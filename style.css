@@ -65,6 +65,7 @@ body {
 }
 
 canvas {
+  touch-action: none;
   display: block;
   /* Fit inside the available box while preserving 3:2 */
   max-width: 100%;

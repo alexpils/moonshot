@@ -188,7 +188,7 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('keyup', e => keys.delete(e.code));
 
-canvas.addEventListener('pointerdown', handleCanvasClick);
+canvas.addEventListener('pointerdown', function(e){e.preventDefault();handleCanvasClick(e);},{passive:false});
 
 function handleCanvasClick(e) {
   const rect   = canvas.getBoundingClientRect();
