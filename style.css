@@ -157,10 +157,6 @@ canvas {
 }
 
 /* ── Desktop: hide touch controls, full canvas ── */
-@media (hover: none), (pointer: coarse) {
-  .fullscreen-btn { display: none; }
-}
-
 @media (hover: hover) and (pointer: fine) {
   /* Keep side panels but hide the touch-only move buttons */
   .move-btn    { display: none; }
@@ -217,13 +213,11 @@ canvas {
   transition: background 0.1s;
 }
 .menu-btn:active { background: rgba(59,130,246,0.5); }
-.menu-btn.hidden { display: none; }
 .bottom-bar.hidden, .side-ctrl.hidden { display: none !important; }
 
 
 /* Hide fullscreen button on desktop (less needed, keyboard F11 works) */
 @media (hover: hover) and (pointer: fine) {
-  .fullscreen-btn { display: none; }
 }
 
 /* Hide when already in fullscreen */
@@ -265,3 +259,10 @@ button {
   background: rgba(251,211,77,0.25);
   transform: scale(0.93);
 }
+/* ── Button visibility ── */
+/* Fullscreen: desktop only */
+@media (hover: none), (pointer: coarse) {
+  .fullscreen-btn { display: none !important; }
+}
+/* Menu button: always visible, but .hidden hides it */
+.menu-btn.hidden { display: none; }
