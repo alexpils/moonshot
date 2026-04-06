@@ -1671,37 +1671,32 @@ function renderM0() {
 function drawM0Rocket() {
   var thr=(keys.has('ArrowUp')||keys.has('KeyW')||keys.has('Space'))&&m0Rocket.fuel>0&&m0State.outcome==='playing';
   ctx.save(); ctx.translate(m0Rocket.x,m0Rocket.y); ctx.rotate(m0Rocket.angle);
-  // After rotation by angle=-PI/2:
-  //   local +x  = canvas LEFT  (nose points up = -canvas y, achieved by +local x after -PI/2 rot)
-  //   Actually: rotate(-PI/2) maps: canvas +x -> local -y, canvas +y -> local +x
-  //   So local +x = canvas DOWN (toward Earth), local -x = canvas UP (away from Earth)
-  // Nose = away from Earth = local -x direction. Tail = local +x direction.
+  // ctx.rotate(-PI/2): local +x = UP on canvas (nose), local -x = DOWN (tail, toward Earth)
 
-  // Upper stage — nose at local -x (top), body from x=6 to x=-6, nose spike at x=-16
-  ctx.fillStyle='#f1f5f9';
-  ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(6,-5); ctx.lineTo(6,5); ctx.closePath(); ctx.fill();
-
-  // Stage 1 body — below upper stage = local +x direction (toward Earth)
+  // Stage 1 body — tail direction = local -x (downward toward Earth)
   if (m0State.stage===1) {
     ctx.fillStyle='#64748b';
-    ctx.fillRect(6,-5,28,10);     // stage 1 cylinder
+    ctx.fillRect(-34,-5,28,10);    // cylinder from -34 to -6
     ctx.fillStyle='#475569';
-    // S1 nozzle bell (wider at far end)
-    ctx.beginPath(); ctx.moveTo(34,-5); ctx.lineTo(42,-8); ctx.lineTo(42,8); ctx.lineTo(34,5); ctx.closePath(); ctx.fill();
-    // interstage ring
-    ctx.fillStyle='#94a3b8'; ctx.fillRect(4,-6,4,12);
+    ctx.beginPath(); ctx.moveTo(-34,-5); ctx.lineTo(-42,-8); ctx.lineTo(-42,8); ctx.lineTo(-34,5); ctx.closePath(); ctx.fill(); // nozzle bell
+    ctx.fillStyle='#94a3b8'; ctx.fillRect(-8,-6,4,12); // interstage ring
   }
 
-  // Exhaust flame — shoots out local +x (toward Earth = downward when vertical)
+  // Exhaust — shoots downward out of tail (-x direction, further negative)
   if (thr) {
     var fl=20+Math.random()*14;
-    // Upper stage engine exhaust
-    var x0=m0State.stage===1?42:6;
+    var x0=m0State.stage===1?-42:-6; // exit of nozzle
     ctx.fillStyle='rgba(251,146,60,'+(0.7+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(x0,-4); ctx.lineTo(x0+fl,0); ctx.lineTo(x0,4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x0,-4); ctx.lineTo(x0-fl,0); ctx.lineTo(x0,4); ctx.closePath(); ctx.fill();
     ctx.fillStyle='rgba(253,224,71,'+(0.5+Math.random()*0.3)+')';
-    ctx.beginPath(); ctx.moveTo(x0,-2); ctx.lineTo(x0+fl*0.5,0); ctx.lineTo(x0,2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x0,-2); ctx.lineTo(x0-fl*0.5,0); ctx.lineTo(x0,2); ctx.closePath(); ctx.fill();
   }
+
+  // Upper stage capsule — nose in +x direction (upward)
+  ctx.fillStyle='#f1f5f9';
+  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-4,-6); ctx.lineTo(-4,6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(0,-2); ctx.lineTo(0,2); ctx.closePath(); ctx.fill();
 
   ctx.restore();
 }
