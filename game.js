@@ -1311,16 +1311,17 @@ function resetM4(startFuel) {
 
 function endM4(o,m){m4State.outcome=o;m4State.message=m;}
 
-function evalM4State(dE,dM,dt) {
+function evalM4State(dE,dM,realDt) {
   if (dE<=EARTH_R+5) return endM4('lose','CRASHED INTO EARTH');
   if (dM<=MOON_R+5)  return endM4('lose','CRASHED INTO THE MOON');
   if (Math.hypot(m4Rocket.x-CX,m4Rocket.y-CY)>ESCAPE_DIST) return endM4('lose','LOST IN SPACE');
   if (m4Rocket.fuel<=0&&dE>M4_STABLE_R) return endM4('lose','OUT OF FUEL');
   var inB=dE>=M4_STABLE_MIN&&dE<=M4_STABLE_R;
   if (inB) {
+    m4State.stableTimer+=realDt;
     var rem=Math.max(0,STABLE_HOLD-m4State.stableTimer);
     m4State.message=rem>0?'HOLDING EARTH ORBIT\u2026':'EARTH ORBIT ACHIEVED!';
-    if (m4State.stableTimer>=STABLE_HOLD){endM4('win','MISSION COMPLETE');transition.start(function(){scene='title';});}
+    if (m4State.stableTimer>=STABLE_HOLD&&!transition.active){endM4('win','MISSION COMPLETE');transition.start(function(){scene='title';});}
   } else {
     m4State.stableTimer=0;
     var dE2=Math.hypot(m4Rocket.x-CX,m4Rocket.y-CY);
@@ -1352,7 +1353,7 @@ function updateM4Physics(realDt) {
     m4Rocket.vx+=(gE.ax+gM.ax)*dt;m4Rocket.vy+=(gE.ay+gM.ay)*dt;m4Rocket.x+=m4Rocket.vx*dt;m4Rocket.y+=m4Rocket.vy*dt;
     var last=m4State.trail[m4State.trail.length-1];
     if (!last||Math.hypot(m4Rocket.x-last.x,m4Rocket.y-last.y)>3){m4State.trail.push({x:m4Rocket.x,y:m4Rocket.y});if(m4State.trail.length>TRAIL_MAX)m4State.trail.shift();}
-    evalM4State(gE.dist,gM.dist);
+    evalM4State(gE.dist,gM.dist,realDt);
   }
 }
 
