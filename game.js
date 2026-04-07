@@ -1202,7 +1202,7 @@ function drawOrbitHUD(moon) {
   const warp=WARP_LEVELS[state.warpIdx];
   const fuelPct=Math.max(0,Math.min(1,rocket.fuel/100));
   drawStatusBar(state.outcome==='playing'?state.message:'');
-  drawFuelBar(fuelPct,rocket.fuel);
+  drawFuelBar(fuelPct,rocket.fuel,{markers:[{pct:0.50,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed);
   drawTelemetryPills(dE,dM,warp);
   drawCountdownOverlay();
@@ -1218,15 +1218,65 @@ function drawStatusBar(label) {
   ctx.fillStyle='#c8d8f8'; ctx.fillText(label,W/2,by+26); ctx.textAlign='left'; ctx.restore();
 }
 
-function drawFuelBar(pct,fuelVal) {
-  const fc=pct>0.3?'#38bdf8':pct>0.12?'#fbbf24':'#f87171';
-  const bw=500,bh=8,bx=W/2-250,by=H-60;
+function drawFuelBar(pct,fuelVal,opts) {
+  opts = opts||{};
+  const fc = pct>0.35?'#38bdf8':pct>0.15?'#fbbf24':'#f87171';
+  const bw=540,bh=22,bx=W/2-270,by=H-58;
   ctx.save();
-  ctx.fillStyle='rgba(255,255,255,0.08)'; rrect(bx,by,bw,bh,4); ctx.fill();
-  ctx.fillStyle=fc; rrect(bx,by,bw*pct,bh,4); ctx.fill();
+
+  // Track background
+  ctx.fillStyle='rgba(255,255,255,0.06)';
+  rrect(bx,by,bw,bh,6); ctx.fill();
+
+  // Filled portion with glow
+  if (pct>0) {
+    ctx.shadowColor=fc; ctx.shadowBlur=10;
+    ctx.fillStyle=fc; rrect(bx,by,bw*pct,bh,6); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+
+  // Inner highlight stripe
+  if (pct>0.02) {
+    ctx.fillStyle='rgba(255,255,255,0.10)';
+    rrect(bx+2,by+3,bw*pct-4,6,3); ctx.fill();
+  }
+
+  // Thin border
+  ctx.strokeStyle='rgba(100,140,255,0.18)'; ctx.lineWidth=1;
+  rrect(bx,by,bw,bh,6); ctx.stroke();
+
+  // Tick marks every 25%
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
+  [0.25,0.5,0.75].forEach(function(t){
+    var tx=bx+bw*t;
+    ctx.beginPath(); ctx.moveTo(tx,by+2); ctx.lineTo(tx,by+bh-2); ctx.stroke();
+  });
+
+  // Markers (e.g. stage sep, target fuel)
+  if (opts.markers) {
+    opts.markers.forEach(function(mk){
+      var mx=bx+bw*mk.pct;
+      var col=mk.color||'#facc15';
+      // Vertical marker line (full bar height, extends above)
+      ctx.strokeStyle=col; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(mx,by-10); ctx.lineTo(mx,by+bh+4); ctx.stroke();
+      // Diamond cap
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.moveTo(mx,by-14); ctx.lineTo(mx+5,by-8); ctx.lineTo(mx,by-2); ctx.lineTo(mx-5,by-8); ctx.closePath(); ctx.fill();
+      // Label above
+      ctx.font='600 11px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle=col; ctx.textAlign='center';
+      ctx.fillText(mk.label,mx,by-18);
+    });
+  }
+
+  // Labels
   ctx.font='700 13px Inter,ui-sans-serif,sans-serif';
-  ctx.fillStyle='#6b82a8'; ctx.textAlign='left'; ctx.fillText('FUEL',bx,by-6);
-  ctx.textAlign='right'; ctx.fillStyle=fc; ctx.fillText(fuelVal.toFixed(0)+'%',bx+bw,by-6);
+  ctx.fillStyle='rgba(100,130,180,0.7)'; ctx.textAlign='left';
+  ctx.shadowBlur=0;
+  ctx.fillText('FUEL',bx,by-6);
+  ctx.textAlign='right'; ctx.fillStyle=fc;
+  ctx.fillText(fuelVal.toFixed(0)+'%',bx+bw,by-6);
   ctx.textAlign='left'; ctx.restore();
 }
 
@@ -1305,7 +1355,7 @@ function drawLandingHUD() {
   if (lState.outcome==='playing') drawStatusBar(lState.message);
 
   // Fuel bar
-  drawFuelBar(fuelPct,lRocket.fuel);
+  drawFuelBar(fuelPct,lRocket.fuel,{markers:[{pct:0.30,label:'TARGET',color:'#4ade80'}]});
 
   // Speed gauge scaled to landing speeds
   drawSpeedGauge(speed, 100);
@@ -1417,7 +1467,7 @@ function drawM3HUD() {
   const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
 
   if (m3State.outcome==='playing') drawStatusBar(m3State.message);
-  drawFuelBar(fuelPct,m3Rocket.fuel);
+  drawFuelBar(fuelPct,m3Rocket.fuel,{markers:[{pct:0.30,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed,400);
 
   // Hold countdown ring
@@ -1609,7 +1659,7 @@ function drawM4HUD(moon) {
   var dM=Math.hypot(m4Rocket.x-moon.x,m4Rocket.y-moon.y),warp=WARP_LEVELS[m4State.warpIdx];
   var fuelPct=Math.max(0,Math.min(1,m4Rocket.fuel/100));
   if (m4State.outcome==='playing') drawStatusBar(m4State.message);
-  drawFuelBar(fuelPct,m4Rocket.fuel);
+  var fuelPct2=fuelPct; drawFuelBar(fuelPct2,m4Rocket.fuel,{markers:[{pct:0.25,label:'RESERVE',color:'#4ade80'}]});
   drawSpeedGauge(speed);
   if (m4State.outcome==='playing'&&m4State.stableTimer>0) {
     var rem=Math.max(0,M4_HOLD-m4State.stableTimer),prog=m4State.stableTimer/M4_HOLD;
@@ -1933,7 +1983,9 @@ function drawM0HUD() {
   var hFrac=speed>0?tangV2/speed:0;
 
   if (m0State.outcome==='playing') drawStatusBar(m0State.message);
-  drawFuelBar(fuelPct,m0Rocket.fuel);
+  { var m0markers=[];
+    if(m0State.stage===1) m0markers.push({pct:0.50,label:'STAGE 2',color:'#a78bfa'});
+    drawFuelBar(fuelPct,m0Rocket.fuel,{markers:m0markers}); }
   drawSpeedGauge(speed,800);
 
   // Hold countdown
