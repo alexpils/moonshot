@@ -21,14 +21,22 @@ A physics-based space flight game. Navigate a rocket from Earth launch to lunar 
 
 ## Game Modes
 
-**Full Mission** — Start from M00 Launch and fly the complete mission chain. Missions auto-chain with fuel carrying over. Endgame screen after M04 shows your stats for all missions.
+**Full Mission** — Start from M00 Launch and fly the complete chain. Missions auto-chain with fuel carrying over. Endgame screen after M04 shows stats for all missions.
 
-**Single Mission** — Pick any unlocked mission and fly it standalone. Starts with a realistic fuel budget (M01: 100%, M02: 80%, M03: 60%, M04: 40%) simulating arriving on budget from the prior mission. Unlock logic still applies — beat missions in order.
+**Single Mission** — Pick any unlocked mission and fly it standalone. Starts with a realistic fuel budget simulating arriving on target from the prior mission:
+
+| Mission | Start fuel | Target marker |
+|---------|-----------|---------------|
+| M01 Orbit | 100% | 80% |
+| M02 Landing | 80% | 60% |
+| M03 Ascent | 60% | 40% |
+| M04 Return | 40% | — |
 
 ---
 
 ## Controls
 
+### Desktop
 | Input | Action |
 |-------|--------|
 | **W / Space / ↑** | Thrust |
@@ -39,16 +47,17 @@ A physics-based space flight game. Navigate a rocket from Earth launch to lunar 
 | **1–4** | Time warp (1×, 2×, 3×, 5×) |
 | **R** | Restart mission |
 
-**Touch controls:** Rotate and thrust buttons on side panels. Warp cycle button (left panel, below RETRO) taps through 1×→2×→3×→5×→1×. Restart bottom-right. Portrait mode prompts you to rotate your device.
+### Touch
+Side panels with rotate, thrust, PRO/RETRO buttons. Warp cycle (left panel, below RETRO) taps through 1×→2×→3×→5×. Restart bottom-right. Portrait mode shows a rotate hint. Tap the fullscreen button (⛶) for best experience.
 
 ---
 
 ## HUD
 
-- **Fuel gauge** — prominent bar at bottom center. Color-coded (blue→amber→red). Green target marker shows recommended fuel remaining for the next mission. M00 shows purple STAGE 2 marker at 50%.
+- **Fuel gauge** — prominent bar at bottom center with glow. Color: blue→amber→red. Green target marker shows recommended fuel for the next mission. M00 shows purple STAGE 2 marker at 50%.
 - **Speed gauge** — arc gauge bottom-left
-- **Trajectory prediction** — dashed yellow line showing your path. On M02 landing, tip color indicates: 🟢 TOUCHDOWN (on pad, safe speed) / 🟡 SLOW DOWN (on pad, too fast) / 🔴 MOON IMPACT (off pad)
-- **Status bar** — mission guidance text at top center
+- **Trajectory prediction** — dashed path showing where you're headed. On M02 landing the tip shows: 🟢 TOUCHDOWN / 🟡 SLOW DOWN / 🔴 MOON IMPACT
+- **Status bar** — mission guidance at top center
 - **Telemetry pills** — distances and warp factor
 
 ---
@@ -61,13 +70,20 @@ A physics-based space flight game. Navigate a rocket from Earth launch to lunar 
 - M00: two-stage rocket with atmospheric drag, exponential scale height
 - M02: Moon-only gravity for landing scene
 - Time warp: 1×, 2×, 3×, 5× (sub-stepped for stability)
-- Camera: smooth blend to Moon-centred view when in lunar orbit
+- Camera: smooth blend to Moon-centred view in lunar orbit
+
+---
+
+## Music
+
+"Rocket" by Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 — http://creativecommons.org/licenses/by/4.0/
 
 ---
 
 ## Tech
 
-Vanilla JS + HTML5 Canvas. No libraries, no build step. Single file (`game.js`, ~2200 lines). Served as static files.
+Vanilla JS + HTML5 Canvas. No libraries, no build step. Single game file (`game.js`, ~2300 lines).
 
 ```bash
 # Run locally
