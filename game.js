@@ -197,7 +197,14 @@ canvas.addEventListener('pointermove', function(e){
   titleMouse.y=(e.clientY-rect.top)*(canvas.height/rect.height);
 },{passive:true});
 
+function enterTitle() {
+  scene = 'title';
+  orbitHandoff = null; // clear handoff so direct M2 start is always fresh
+  setTouchUIVisible(false);
+}
+
 function handleCanvasClick(e) {
+  if (transition.active) return; // ignore clicks during fade transitions
   const rect   = canvas.getBoundingClientRect();
   const scaleX = canvas.width  / rect.width;
   const scaleY = canvas.height / rect.height;
@@ -209,11 +216,11 @@ function handleCanvasClick(e) {
   }
 
   if (scene === 'title') {
-    if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); }
-    if (hit(uiHitBoxes.mission1) && progress.mission0Beaten) { scene = 'orbit'; resetGame(); }
-    if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); }
-    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); }
-    if (hit(uiHitBoxes.mission4) && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); }
+    if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission1) && progress.mission0Beaten) { scene = 'orbit'; resetGame(); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission4) && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); setTouchUIVisible(true); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -244,24 +251,25 @@ function handleCanvasClick(e) {
       };
       scene = 'landing';
       resetLanding(orbitHandoff);
+      setTouchUIVisible(true);
     }
-    if (hit(uiHitBoxes.backToTitle) && state.outcome !== 'playing') scene = 'title';
+    if (hit(uiHitBoxes.backToTitle) && state.outcome !== 'playing') enterTitle();
   }
   if (scene === 'landing') {
     if (hit(uiHitBoxes.retryLanding)) resetLanding(orbitHandoff);
-    if (hit(uiHitBoxes.backToTitle))  scene = 'title';
+    if (hit(uiHitBoxes.backToTitle))  enterTitle();
   }
   if (scene === 'm3') {
     if (hit(uiHitBoxes.retryM3))    resetM3(m3EntryFuel);
-    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+    if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
   if (scene === 'm0') {
     if (hit(uiHitBoxes.retryM0))     resetM0();
-    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+    if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
   if (scene === 'm4') {
     if (hit(uiHitBoxes.retryM4))    resetM4(m4EntryFuel);
-    if (hit(uiHitBoxes.backToTitle)) scene = 'title';
+    if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
 }
 
@@ -1405,6 +1413,10 @@ function updateM4Physics(realDt) {
     m4Rocket.vx+=(gE.ax+gM.ax)*dt;m4Rocket.vy+=(gE.ay+gM.ay)*dt;m4Rocket.x+=m4Rocket.vx*dt;m4Rocket.y+=m4Rocket.vy*dt;
     var last=m4State.trail[m4State.trail.length-1];
     if (!last||Math.hypot(m4Rocket.x-last.x,m4Rocket.y-last.y)>3){m4State.trail.push({x:m4Rocket.x,y:m4Rocket.y});if(m4State.trail.length>TRAIL_MAX)m4State.trail.shift();}
+  }
+  // evalM4State called once per frame (not per substep) to avoid stableTimer running N× too fast at warp N
+  if (m4State.outcome==='playing') {
+    var moon=moonXY(m4State.moonAngle),gE=gravAccel(CX,CY,EARTH_MASS,m4Rocket.x,m4Rocket.y),gM=gravAccel(moon.x,moon.y,MOON_MASS,m4Rocket.x,m4Rocket.y);
     evalM4State(gE.dist,gM.dist,realDt);
   }
 }
@@ -1881,8 +1893,6 @@ function loop(now) {
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
-  // Show/hide touch controls based on scene
-  setTouchUIVisible(scene!=='title');
   if (scene==='title')        renderTitle();
   else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
@@ -1908,7 +1918,7 @@ function loop(now) {
   }
   btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleFS();},{passive:false});
   const menuBtn=document.getElementById('btn-menu');
-  if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')scene='title';},{passive:false});
+  if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')enterTitle();},{passive:false});
 
   initTouchUI();
   function onFSChange() { const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement); btn.textContent=inFS?'\u2715':'\u26f6'; btn.style.display=inFS?'none':''; }

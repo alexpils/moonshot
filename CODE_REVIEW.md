@@ -1,6 +1,7 @@
 # Moonshot — Code Review
 
 _Reviewed: 2026-04-06 | Reviewer: Mister Krabs 🦀 | File: game.js (~1998 lines)_
+_Updated: 2026-04-07 — top 3+1 bugs fixed (see Fixes Applied below)_
 
 ---
 
@@ -40,13 +41,13 @@ _Reviewed: 2026-04-06 | Reviewer: Mister Krabs 🦀 | File: game.js (~1998 lines
 
 ## 3. Bugs / Edge Cases
 
-**M4 stableTimer runs N× too fast at warp N. (Real bug.)** evalM4State() is called from inside the substep loop and receives realDt (the full un-warped frame delta). At warp 5 with 10 substeps, the timer accumulates realDt 10 times per frame. The hold could complete in ~3 real seconds at warp 5 instead of 60. M3 correctly accumulates its hold timer once per frame after the substep loop. Fix: move the stableTimer accumulation out of evalM4State and into a per-frame block as M3 does.
+**~~M4 stableTimer runs N× too fast at warp N. (Real bug.)~~ ✅ FIXED 2026-04-07** evalM4State() is called from inside the substep loop and receives realDt (the full un-warped frame delta). At warp 5 with 10 substeps, the timer accumulates realDt 10 times per frame. The hold could complete in ~3 real seconds at warp 5 instead of 60. M3 correctly accumulates its hold timer once per frame after the substep loop. Fix: move the stableTimer accumulation out of evalM4State and into a per-frame block as M3 does.
 
 **evalState (orbit) recalculates moonNow redundantly** (~line 453). The moonXY(state.moonAngle) result is already computed at the top of the substep loop as , but evalState calls moonXY again. Pass  as a parameter.
 
 **Stage separation (updateM0Physics, ~line 1445) is safe by accident.** The if-block runs inside the substep loop, but setting stage=2 prevents re-entry. The vy+30 separation kick is applied in world-space (downward canvas +Y), not rocket-frame, which looks physically wrong at non-vertical orientations.
 
-**transition.start() win path is re-entrant-prone.** After end("win",...) is called in evalState, the substep loop break fires on the *next* check, not immediately. Works correctly today but is fragile; a future refactor could cause double-fire of the transition callback.
+**transition.start() win path is re-entrant-prone.** _(handleCanvasClick now guarded with `if (transition.active) return` — partially mitigated)_ After end("win",...) is called in evalState, the substep loop break fires on the *next* check, not immediately. Works correctly today but is fragile; a future refactor could cause double-fire of the transition callback.
 
 **M3 stableTimer double-reset.** Both evalM3State (~line 609) and the per-frame block in updateM3Physics reset stableTimer=0 when out of band. Harmless but confusing.
 
@@ -66,3 +67,69 @@ _Reviewed: 2026-04-06 | Reviewer: Mister Krabs 🦀 | File: game.js (~1998 lines
 **Prograde auto-orient is not warp-scaled.** The rotation step is ROT_SPEED * 1.5 * realDt regardless of warp. At warp 5, prograde tracking noticeably lags during burns. Multiply step by warp (or a damped fraction) to keep orientation responsive.
 
 **M0 constant gravity** is an intentional design choice and well-executed. The transition to N-body mechanics in M1 is jarring by design.
+---
+
+## 5. Touch / Mobile
+
+**Touch controls are well-structured** with pointerdown/up/out/cancel listeners and passive:false on touchmove. Simultaneous thrust + rotate works correctly since each button has independent listeners.
+
+**pointerout as release handler** can misfire on fast swipes that leave button bounds before the pointer lifts. A window-level pointerup listener is more reliable.
+
+**Canvas is fixed-size.** W/H are read once at startup, never updated. No resize handler exists. On a 390px-wide phone, the title screen 3-column card grid (totalW = 680*3 + 80 = 2120px) is completely off-screen. All HUD elements use hardcoded pixel positions assuming 1280x720+.
+
+**No landscape lock or orientation prompt.** Portrait mode on mobile produces a broken render. A CSS @media (orientation: portrait) overlay would help significantly.
+
+**Keyboard hint overlay is correctly hidden on touch** via ov.style.display = none. Good detail.
+
+---
+
+## 6. Ideas for Improvement
+
+- **getActiveState() / getActiveRocket() helpers** — remove the 5-way ternary chains that appear 4+ times. Makes adding M5 a one-liner.
+- **Offscreen canvas caching** for speed gauge ticks, crater layer, and gradient backgrounds. Biggest single performance win for mobile.
+- **Symplectic Euler** — one-line change per substep, significantly better orbit energy conservation.
+- **Sound effects via Web Audio API** — thruster hiss, landing thud, mission-complete chime. No libraries needed, large feel improvement.
+- **Fuel star rating on win** — 3 stars >60% remaining, 2 stars >30%, 1 star landed. Easy addition to drawOutcomeBanner.
+- **Mission timer + localStorage high scores** — the stableTimer pattern is already there; add missionStartTime and best-time tracking.
+- **Throttle trajectory prediction** — recalculate only when |delta-v| > epsilon or every 3rd frame. Biggest CPU saving available.
+- **Replace rrect manual arcTo** with ctx.roundRect() — now baseline in all modern browsers, 1 line vs 6.
+- **Dead code cleanup** — remove m0Stage1Sep, the identity ternary in resetLanding, and document LAND_THRUST ratio. _(not yet done)_
+- **Mission 5 Reentry** — heat shield (angle of attack, thermal load), parachute deploy. The locked card slot is already on the title screen.
+
+---
+
+## 8. Fixes Applied
+
+_2026-04-07 — applied by Mister Krabs 🦀_
+
+| # | Fix | Location | Notes |
+|---|-----|----------|-------|
+| 1 | Guard `handleCanvasClick` with `if (transition.active) return` | `handleCanvasClick()` top | Prevents double-firing outcome buttons during fade transitions |
+| 2 | Reset `orbitHandoff = null` on all title entries | New `enterTitle()` helper | All `scene='title'` assignments replaced with `enterTitle()`, including menu button. Ensures direct M2 start is always fresh. |
+| 3 | M4 `stableTimer` warp-speed bug | `updateM4Physics()` | Moved `evalM4State()` call from inside substep loop to once per frame. At warp 5 the timer was accumulating 10× per frame; now correct. |
+| 4 | `setTouchUIVisible` event-driven (not per-frame) | `loop()` + scene entry points | Removed per-frame call in render loop; added explicit `setTouchUIVisible(true/false)` at each scene transition point instead. |
+
+**Still open (next session):**
+- Cache gradients + speed gauge ticks to offscreen canvases (performance)
+- `getActiveState()` / `getActiveRocket()` helpers (maintainability)
+- Dead code cleanup (m0Stage1Sep, identity ternary in resetLanding)
+- Symplectic Euler integration (physics accuracy)
+- Web Audio sound effects
+
+
+---
+
+## 7. Summary
+
+Moonshot is a polished, genuinely fun browser game that punches well above its weight for a solo vanilla-JS project. The visual layer — lighting, shadows, eclipse calculations, parallax title — is well above average. The mission progression and orbit-handoff system are thoughtful and work correctly.
+
+**Top 3 priorities:**
+
+1. ~~**Fix the M4 stableTimer bug**~~ ✅ Fixed 2026-04-07 — `evalM4State` moved out of substep loop.
+2. **Cache gradients and speed gauge ticks to offscreen canvases** — the biggest practical performance improvement, especially on mobile. _(still open)_
+3. **Add getActiveState() helper** — the 5-way ternary dispatch is a maintainability timebomb; every new mission makes it worse. _(still open)_
+
+The codebase is well-commented where it matters (physics math, camera, handoff logic) and the section banners make navigation easy. Solid foundation for Mission 5 and beyond.
+
+**Overall code quality: 7/10**
+_Well above average for a solo/game-jam project. Deductions for: significant copy-paste duplication across missions, no mobile viewport adaptation, and one real logic bug (M4 timer). The physics is arcade-accurate and the visual quality is genuinely impressive._
