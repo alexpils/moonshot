@@ -95,7 +95,6 @@ const LAND_CRATERS = [
 let scene = 'title';
 let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4' | 'endgame'
 const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null };
-let missionMode = 'full'; // 'full' | 'single'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m0OrbitDir = 1; // 1 = CW/east (default, original), -1 = CCW/west (set when M0 exits west)
@@ -221,13 +220,11 @@ function handleCanvasClick(e) {
   }
 
   if (scene === 'title') {
-    if (hit(uiHitBoxes.modeFullBtn))   { missionMode = 'full'; }
-    if (hit(uiHitBoxes.modeSingleBtn)) { missionMode = 'single'; }
     if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission1) && progress.mission0Beaten) { scene = 'orbit'; orbitHandoff = null; resetGame(); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission2) && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission3) && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission4) && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission1) && missionMode !== 'full' && progress.mission0Beaten) { scene = 'orbit'; resetGame(); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission2) && missionMode !== 'full' && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission3) && missionMode !== 'full' && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission4) && missionMode !== 'full' && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); setTouchUIVisible(true); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -280,7 +277,7 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
   if (scene === 'endgame') {
-    if (hit(uiHitBoxes.playAgain))   { if(missionMode==='full'){scene='m0';resetM0();setTouchUIVisible(true);}else{enterTitle();} }
+    if (hit(uiHitBoxes.playAgain))   { scene='m0'; resetM0(); setTouchUIVisible(true); }
     if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
 }
@@ -554,12 +551,10 @@ function evalState(dEarth,dMoon,realDt) {
         fuel: rocket.fuel,
       };
       progress.unlockMission1();
-      if (missionMode !== 'single') {
-        transition.start(() => {
-          scene = 'landing';
-          resetLanding(orbitHandoff);
-        });
-      }
+      transition.start(() => {
+        scene = 'landing';
+        resetLanding(orbitHandoff);
+      });
     }
   } else {
     state.stableTimer=0;
@@ -628,8 +623,7 @@ function evalLandingState(distToMoon) {
       missionLog.m2={time:(performance.now()-lState.missionStartTime)/1000,fuel:lRocket.fuel,maxSpeed:lState.maxSpeed};
       const _m3Fuel = lRocket.fuel;
       m3EntryFuel = _m3Fuel;
-      if (missionMode === 'single') { transition.start(()=>{ enterTitle(); }); }
-      else { transition.start(()=>{ scene='m3'; resetM3(_m3Fuel); }); }
+      transition.start(()=>{ scene='m3'; resetM3(_m3Fuel); });
       return;
     }
     if (!onPad) return endLanding('lose','MISSED THE LANDING PAD');
@@ -695,8 +689,7 @@ function updateM3Physics(realDt) {
       progress.unlockMission3();
       missionLog.m3={time:(performance.now()-m3State.missionStartTime)/1000,fuel:m3Rocket.fuel,maxSpeed:m3State.maxSpeed};
       var _m4f=m3Rocket.fuel; m4EntryFuel=_m4f;
-      if (missionMode === 'single') { transition.start(function(){enterTitle();}); }
-      else { transition.start(function(){scene='m4';resetM4(_m4f);}); }
+      transition.start(function(){scene='m4';resetM4(_m4f);});
     }
   }
 }
@@ -982,23 +975,6 @@ function renderTitle() {
   ctx.font='400 38px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,510);
 
-  // Mode toggle pills
-  { var pillW=200,pillH=48,pillGap=20,pillY=564,pill1X=CX-pillW-pillGap/2,pill2X=CX+pillGap/2;
-    registerBtn('modeFullBtn',  pill1X, pillY, pillW, pillH);
-    registerBtn('modeSingleBtn',pill2X, pillY, pillW, pillH);
-    var modes=[{key:'full',label:'Full Mission',x:pill1X},{key:'single',label:'Single Mission',x:pill2X}];
-    modes.forEach(function(m){
-      var active=missionMode===m.key;
-      ctx.fillStyle=active?'rgba(60,100,255,0.30)':'rgba(12,18,40,0.70)';
-      ctx.strokeStyle=active?'rgba(120,160,255,0.80)':'rgba(80,110,180,0.35)';
-      ctx.lineWidth=active?2:1.5;
-      rrect(m.x,pillY,pillW,pillH,24); ctx.fill(); ctx.stroke();
-      ctx.font=(active?'700':'500')+' 18px Inter,ui-sans-serif,sans-serif';
-      ctx.fillStyle=active?'#c8d8f8':'rgba(148,175,220,0.55)';
-      ctx.textAlign='center'; ctx.fillText(m.label,m.x+pillW/2,pillY+pillH*0.65);
-    });
-  }
-
   const cardW=420,cardH=230,cardY=CY+20;
 
   function drawCard(key,x,y,w,h,icon,num,title2,sub,locked=false) {
@@ -1023,13 +999,26 @@ function renderTitle() {
 
   // 2-row grid layout: 3 cards per row
   var cW=680, cH=210, cGapX=40, cGapY=28;
-  var row1Y=632, row2Y=632+cH+cGapY;
+  var row1Y=580, row2Y=580+cH+cGapY;
   var totalW=cW*3+cGapX*2, col0=CX-totalW/2, col1=col0+cW+cGapX, col2=col1+cW+cGapX;
   drawCard('mission0',col0,row1Y,cW,cH,'\uD83D\uDE80','00','LAUNCH',            'Launch from Earth to orbit', false);
-  drawCard('mission1',col1,row1Y,cW,cH,progress.mission0Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',   progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first',!progress.mission0Beaten);
-  drawCard('mission2',col2,row1Y,cW,cH,progress.mission1Beaten?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING', progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first',!progress.mission1Beaten);
-  drawCard('mission3',col0,row2Y,cW,cH,progress.mission2Beaten?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',  progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first',!progress.mission2Beaten);
-  drawCard('mission4',col1,row2Y,cW,cH,progress.mission3Beaten?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',   progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first',!progress.mission3Beaten);
+  var fullLock = missionMode === 'full';
+  drawCard('mission1',col1,row1Y,cW,cH,
+    (!fullLock&&progress.mission0Beaten)?'\uD83C\uDF0D':'\uD83D\uDD12','01','LUNAR ORBIT',
+    fullLock?'Start from Launch in full mode':(progress.mission0Beaten?'Reach stable lunar orbit':'Complete Launch first'),
+    fullLock||!progress.mission0Beaten);
+  drawCard('mission2',col2,row1Y,cW,cH,
+    (!fullLock&&progress.mission1Beaten)?'\uD83C\uDF15':'\uD83D\uDD12','02','LUNAR LANDING',
+    fullLock?'Start from Launch in full mode':(progress.mission1Beaten?'Land softly on the Moon':'Complete Lunar Orbit first'),
+    fullLock||!progress.mission1Beaten);
+  drawCard('mission3',col0,row2Y,cW,cH,
+    (!fullLock&&progress.mission2Beaten)?'\uD83D\uDE80':'\uD83D\uDD12','03','LUNAR ASCENT',
+    fullLock?'Start from Launch in full mode':(progress.mission2Beaten?'Launch from Moon to orbit':'Complete Lunar Landing first'),
+    fullLock||!progress.mission2Beaten);
+  drawCard('mission4',col1,row2Y,cW,cH,
+    (!fullLock&&progress.mission3Beaten)?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',
+    fullLock?'Start from Launch in full mode':(progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first'),
+    fullLock||!progress.mission3Beaten);
   drawCard('mission5',col2,row2Y,cW,cH,'\uD83D\uDD12','05','REENTRY',           'Coming soon…', true);
 
   ctx.textAlign='center';
@@ -1485,8 +1474,7 @@ function evalM4State(dE,dM,realDt) {
     if (m4State.stableTimer>=M4_HOLD&&!transition.active){
       endM4('win','MISSION COMPLETE');
       missionLog.m4={time:(performance.now()-m4State.missionStartTime)/1000,fuel:m4Rocket.fuel,maxSpeed:m4State.maxSpeed};
-      if (missionMode === 'single') { transition.start(function(){enterTitle();}); }
-      else { transition.start(function(){scene='endgame';}); }
+      transition.start(function(){scene='endgame';});
     }
   } else {
     m4State.stableTimer=0;
@@ -1736,8 +1724,7 @@ function updateM0Physics(realDt) {
         progress.unlockMission0();
         missionLog.m0={time:(performance.now()-m0State.missionStartTime)/1000,fuel:m0Rocket.fuel,maxSpeed:m0State.maxSpeed};
         m0OrbitDir = m0Rocket.vx < 0 ? -1 : 1; // west launch (vx<0) → CCW (dir=-1), east → CW (dir=1)
-        if (missionMode === 'single') { transition.start(function(){enterTitle();}); }
-        else { transition.start(function(){scene='orbit';resetGame();}); }
+        transition.start(function(){scene='orbit';resetGame();});
       }
     } else {
       m0State.stableTimer=0;
