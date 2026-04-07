@@ -782,7 +782,15 @@ function predictLandingPath() {
       const prevX=px,prevY=py;
       const gM=gravAccel(CX,CY,MOON_MASS,px,py);
       pvx+=gM.ax*subDt; pvy+=gM.ay*subDt; px+=pvx*subDt; py+=pvy*subDt;
-      if (gM.dist<LAND_MOON_R) { const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R); col={x:sp.x,y:sp.y,body:'MOON'}; pts.push(sp); hit=true; break; }
+      if (gM.dist<LAND_MOON_R) {
+        const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R);
+        const impactAngle=Math.atan2(sp.y-CY,sp.x-CX);
+        let padDiff=impactAngle-PAD_ANGLE; while(padDiff>Math.PI)padDiff-=2*Math.PI; while(padDiff<-Math.PI)padDiff+=2*Math.PI;
+        const impactSpd=Math.hypot(pvx,pvy);
+        const onPadPred=Math.abs(padDiff)<PAD_HALF && impactSpd<=LAND_SPEED_MAX;
+        col={x:sp.x,y:sp.y,body:onPadPred?'TOUCHDOWN':'MOON'};
+        pts.push(sp); hit=true; break;
+      }
       if (gM.dist>LAND_ESCAPE||gM.dist<2) { hit=true; break; }
     }
     if (hit) break; pts.push({x:px,y:py});
