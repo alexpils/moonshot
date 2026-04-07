@@ -154,6 +154,7 @@ canvas {
   /* Add keyboard hint to orient buttons via title tooltip */
   .orient-btn      { cursor: pointer; }
   .side-extra-btn  { display: none; }
+  .game-row        { padding: 0 16px; }
 }
 
 
