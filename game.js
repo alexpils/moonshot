@@ -1485,7 +1485,7 @@ function renderM3() {
 
   // Prediction + trail + rocket
   if (m3State.outcome==='playing') {
-    const pred=predictM3Path(), pts=pred.pts;
+    const pred=m3State.launched?predictM3Path():{pts:[],collision:null}, pts=pred.pts;
     const sc=collisionFilter.update(pred.collision), dispPts=pts.slice(0,pathLengthFilter.update(pts.length));
     if (sc) { const sp=Math.max(0,dispPts.length-20); strokePath(dispPts.slice(0,sp),'rgba(251,211,77,0.45)',1.3,[6,6]); strokePath(dispPts.slice(sp),'rgba(255,80,80,0.75)',2.0,[]); drawCollisionWarning(sc); }
     else strokePath(dispPts,'rgba(251,211,77,0.45)',1.3,[6,6]);
