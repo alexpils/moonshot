@@ -1202,7 +1202,7 @@ function drawOrbitHUD(moon) {
   const warp=WARP_LEVELS[state.warpIdx];
   const fuelPct=Math.max(0,Math.min(1,rocket.fuel/100));
   drawStatusBar(state.outcome==='playing'?state.message:'');
-  drawFuelBar(fuelPct,rocket.fuel,{markers:[{pct:0.50,label:'TARGET',color:'#4ade80'}]});
+  drawFuelBar(fuelPct,rocket.fuel,{markers:[{pct:0.80,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed);
   drawTelemetryPills(dE,dM,warp);
   drawCountdownOverlay();
@@ -1355,7 +1355,7 @@ function drawLandingHUD() {
   if (lState.outcome==='playing') drawStatusBar(lState.message);
 
   // Fuel bar
-  drawFuelBar(fuelPct,lRocket.fuel,{markers:[{pct:0.30,label:'TARGET',color:'#4ade80'}]});
+  drawFuelBar(fuelPct,lRocket.fuel,{markers:[{pct:0.60,label:'TARGET',color:'#4ade80'}]});
 
   // Speed gauge scaled to landing speeds
   drawSpeedGauge(speed, 100);
@@ -1467,7 +1467,7 @@ function drawM3HUD() {
   const inBand=dist>=M3_ORBIT_MIN&&dist<=M3_ORBIT_MAX;
 
   if (m3State.outcome==='playing') drawStatusBar(m3State.message);
-  drawFuelBar(fuelPct,m3Rocket.fuel,{markers:[{pct:0.30,label:'TARGET',color:'#4ade80'}]});
+  drawFuelBar(fuelPct,m3Rocket.fuel,{markers:[{pct:0.40,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed,400);
 
   // Hold countdown ring
@@ -1659,7 +1659,7 @@ function drawM4HUD(moon) {
   var dM=Math.hypot(m4Rocket.x-moon.x,m4Rocket.y-moon.y),warp=WARP_LEVELS[m4State.warpIdx];
   var fuelPct=Math.max(0,Math.min(1,m4Rocket.fuel/100));
   if (m4State.outcome==='playing') drawStatusBar(m4State.message);
-  var fuelPct2=fuelPct; drawFuelBar(fuelPct2,m4Rocket.fuel,{markers:[{pct:0.25,label:'RESERVE',color:'#4ade80'}]});
+  drawFuelBar(fuelPct,m4Rocket.fuel);
   drawSpeedGauge(speed);
   if (m4State.outcome==='playing'&&m4State.stableTimer>0) {
     var rem=Math.max(0,M4_HOLD-m4State.stableTimer),prog=m4State.stableTimer/M4_HOLD;
