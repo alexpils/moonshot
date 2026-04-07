@@ -1,7 +1,7 @@
 # Moonshot — Code Review
 
 _Reviewed: 2026-04-06 | Reviewer: Mister Krabs 🦀 | File: game.js (~1998 lines)_
-_Updated: 2026-04-07 — top 3+1 bugs fixed (see Fixes Applied below)_
+_Updated: 2026-04-07 — top 3+1 bugs fixed + dead code cleanup + symplectic Euler verified (see Fixes Applied below)_
 
 ---
 
@@ -93,7 +93,7 @@ _Updated: 2026-04-07 — top 3+1 bugs fixed (see Fixes Applied below)_
 - **Mission timer + localStorage high scores** — the stableTimer pattern is already there; add missionStartTime and best-time tracking.
 - **Throttle trajectory prediction** — recalculate only when |delta-v| > epsilon or every 3rd frame. Biggest CPU saving available.
 - **Replace rrect manual arcTo** with ctx.roundRect() — now baseline in all modern browsers, 1 line vs 6.
-- **Dead code cleanup** — remove m0Stage1Sep, the identity ternary in resetLanding, and document LAND_THRUST ratio. _(not yet done)_
+- ~~**Dead code cleanup**~~ ✅ Fixed 2026-04-07 — removed `m0Stage1Sep`, fixed identity ternary in `resetLanding`, extracted `LAND_FUEL_RATIO` constant.
 - **Mission 5 Reentry** — heat shield (angle of attack, thermal load), parachute deploy. The locked card slot is already on the title screen.
 
 ---
@@ -108,13 +108,17 @@ _2026-04-07 — applied by Mister Krabs 🦀_
 | 2 | Reset `orbitHandoff = null` on all title entries | New `enterTitle()` helper | All `scene='title'` assignments replaced with `enterTitle()`, including menu button. Ensures direct M2 start is always fresh. |
 | 3 | M4 `stableTimer` warp-speed bug | `updateM4Physics()` | Moved `evalM4State()` call from inside substep loop to once per frame. At warp 5 the timer was accumulating 10× per frame; now correct. |
 | 4 | `setTouchUIVisible` event-driven (not per-frame) | `loop()` + scene entry points | Removed per-frame call in render loop; added explicit `setTouchUIVisible(true/false)` at each scene transition point instead. |
+| 5 | Symplectic Euler verified + documented | Comment at line ~60 | Integration was already symplectic (v updated before x) — added comment to document this. No code change needed. |
+| 6 | Dead code: remove `m0Stage1Sep` | Global state block | Variable declared but never read — removed. |
+| 7 | Dead code: fix identity ternary in `resetLanding` | `resetLanding()` | Both branches produced the same string — simplified to a direct assignment. |
+| 8 | Dead code: extract `LAND_FUEL_RATIO` constant | Constants block + landing physics | `FUEL_DRAIN*(LAND_THRUST/THRUST)` inlined in physics loop — extracted to named constant. |
 
 **Still open (next session):**
 - Cache gradients + speed gauge ticks to offscreen canvases (performance)
 - `getActiveState()` / `getActiveRocket()` helpers (maintainability)
-- Dead code cleanup (m0Stage1Sep, identity ternary in resetLanding)
-- Symplectic Euler integration (physics accuracy)
 - Web Audio sound effects
+- Fuel star rating on win screen
+- Mission timer + localStorage best times
 
 
 ---

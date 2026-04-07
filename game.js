@@ -26,6 +26,7 @@ const STABLE_HOLD  = 60;
 const LAND_MOON_R    = 300;
 const LAND_ORBIT_R   = 490;
 const LAND_SPEED_MAX = 55;
+const LAND_FUEL_RATIO = FUEL_DRAIN * (LAND_THRUST / THRUST); // fuel drain rate for landing scene
 const PAD_HALF       = 0.30;
 const PAD_ANGLE      = Math.PI / 2;
 const LAND_ESCAPE    = 960;
@@ -56,6 +57,7 @@ const H  = canvas.height;
 const CX = W / 2;
 const CY = H / 2;
 
+// Integration: symplectic Euler — gravity/thrust applied to v before x += v*dt (energy-conserving for orbits)
 const PRED_STEPS    = 140;
 const PRED_DT       = 0.09;
 const PRED_SUBSTEPS = 4;
@@ -95,7 +97,6 @@ const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
 let m4EntryFuel  = 100;  // fuel at M4 start
-let m0Stage1Sep  = false; // M0 stage already separated
 
 // Fade transition state
 const transition = {
@@ -372,7 +373,7 @@ function resetLanding(handoff) {
 
   lState = {
     warpIdx: 0, orientMode: 'prograde', outcome: 'playing',
-    message: handoff ? 'IN LUNAR ORBIT \u2014 INITIATE DESCENT' : 'IN LUNAR ORBIT \u2014 INITIATE DESCENT',
+    message: 'IN LUNAR ORBIT \u2014 INITIATE DESCENT',
     trail: [], fromOrbit: !!handoff,
   };
   lRocket = {
@@ -580,7 +581,7 @@ function updateLandingPhysics(realDt) {
 
   for (let s=0;s<NSUB;s++) {
     if (lState.outcome!=='playing') break;
-    if (thrusting) { lRocket.vx+=Math.cos(lRocket.angle)*LAND_THRUST*dt; lRocket.vy+=Math.sin(lRocket.angle)*LAND_THRUST*dt; lRocket.fuel=Math.max(0,lRocket.fuel-FUEL_DRAIN*(LAND_THRUST/THRUST)*dt); }
+    if (thrusting) { lRocket.vx+=Math.cos(lRocket.angle)*LAND_THRUST*dt; lRocket.vy+=Math.sin(lRocket.angle)*LAND_THRUST*dt; lRocket.fuel=Math.max(0,lRocket.fuel-LAND_FUEL_RATIO*dt); }
     const gM=gravAccel(CX,CY,MOON_MASS,lRocket.x,lRocket.y);
     lRocket.vx+=gM.ax*dt; lRocket.vy+=gM.ay*dt;
     lRocket.x+=lRocket.vx*dt; lRocket.y+=lRocket.vy*dt;
