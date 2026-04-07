@@ -95,6 +95,7 @@ const LAND_CRATERS = [
 let scene = 'title';
 let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4' | 'endgame'
 const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null };
+let missionMode = 'full'; // 'full' | 'single'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m0OrbitDir = 1; // 1 = CW/east (default, original), -1 = CCW/west (set when M0 exits west)
@@ -220,6 +221,8 @@ function handleCanvasClick(e) {
   }
 
   if (scene === 'title') {
+    if (hit(uiHitBoxes.modeFullBtn))   { missionMode = 'full'; }
+    if (hit(uiHitBoxes.modeSingleBtn)) { missionMode = 'single'; }
     if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); setTouchUIVisible(true); }
     if (hit(uiHitBoxes.mission1) && missionMode !== 'full' && progress.mission0Beaten) { scene = 'orbit'; resetGame(); setTouchUIVisible(true); }
     if (hit(uiHitBoxes.mission2) && missionMode !== 'full' && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); setTouchUIVisible(true); }
@@ -974,6 +977,22 @@ function renderTitle() {
 
   ctx.font='400 38px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(148,175,220,0.7)'; ctx.fillText('Choose your mission',CX,510);
+  // Mode toggle pills
+  { var pillW=200,pillH=48,pillGap=20,pillY=564,pill1X=CX-pillW-pillGap/2,pill2X=CX+pillGap/2;
+    registerBtn('modeFullBtn',  pill1X, pillY, pillW, pillH);
+    registerBtn('modeSingleBtn',pill2X, pillY, pillW, pillH);
+    var modes=[{key:'full',label:'Full Mission',x:pill1X},{key:'single',label:'Single Mission',x:pill2X}];
+    modes.forEach(function(m){
+      var active=missionMode===m.key;
+      ctx.fillStyle=active?'rgba(60,100,255,0.30)':'rgba(12,18,40,0.70)';
+      ctx.strokeStyle=active?'rgba(120,160,255,0.80)':'rgba(80,110,180,0.35)';
+      ctx.lineWidth=active?2:1.5;
+      rrect(m.x,pillY,pillW,pillH,24); ctx.fill(); ctx.stroke();
+      ctx.font=(active?'700':'500')+' 18px Inter,ui-sans-serif,sans-serif';
+      ctx.fillStyle=active?'#c8d8f8':'rgba(148,175,220,0.55)';
+      ctx.textAlign='center'; ctx.fillText(m.label,m.x+pillW/2,pillY+pillH*0.65);
+    });
+  }
 
   const cardW=420,cardH=230,cardY=CY+20;
 
@@ -999,7 +1018,7 @@ function renderTitle() {
 
   // 2-row grid layout: 3 cards per row
   var cW=680, cH=210, cGapX=40, cGapY=28;
-  var row1Y=580, row2Y=580+cH+cGapY;
+  var row1Y=632, row2Y=632+cH+cGapY;
   var totalW=cW*3+cGapX*2, col0=CX-totalW/2, col1=col0+cW+cGapX, col2=col1+cW+cGapX;
   drawCard('mission0',col0,row1Y,cW,cH,'\uD83D\uDE80','00','LAUNCH',            'Launch from Earth to orbit', false);
   var fullLock = missionMode === 'full';
