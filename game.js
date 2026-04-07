@@ -195,13 +195,55 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('keyup', e => keys.delete(e.code));
 
-canvas.addEventListener('pointerdown', function(e){e.preventDefault();handleCanvasClick(e);},{passive:false});
+canvas.addEventListener('pointerdown', function(e){e.preventDefault();if(scene==='title'&&!musicStarted)musicPlayTitle();handleCanvasClick(e);},{passive:false});
 canvas.addEventListener('pointermove', function(e){
   if (scene!=='title') return;
   const rect=canvas.getBoundingClientRect();
   titleMouse.x=(e.clientX-rect.left)*(canvas.width/rect.width);
   titleMouse.y=(e.clientY-rect.top)*(canvas.height/rect.height);
 },{passive:true});
+
+
+// ── MUSIC ─────────────────────────────────────────────────────────────────────
+const bgMusic = document.getElementById('bg-music');
+let musicStarted = false;
+let musicFadeTimer = null;
+
+function musicFadeTo(targetVol, durationMs) {
+  if (!bgMusic) return;
+  if (musicFadeTimer) clearInterval(musicFadeTimer);
+  const startVol = bgMusic.volume;
+  const steps = 30;
+  const stepMs = durationMs / steps;
+  const delta = (targetVol - startVol) / steps;
+  let i = 0;
+  musicFadeTimer = setInterval(() => {
+    i++;
+    bgMusic.volume = Math.max(0, Math.min(1, startVol + delta * i));
+    if (i >= steps) {
+      bgMusic.volume = targetVol;
+      clearInterval(musicFadeTimer);
+      if (targetVol === 0) bgMusic.pause();
+    }
+  }, stepMs);
+}
+
+function musicPlayTitle() {
+  if (!bgMusic) return;
+  if (!musicStarted) {
+    bgMusic.volume = 0;
+    bgMusic.play().catch(() => {}); // may need user gesture
+    musicStarted = true;
+  } else if (bgMusic.paused) {
+    bgMusic.volume = 0;
+    bgMusic.play().catch(() => {});
+  }
+  musicFadeTo(0.55, 1500);
+}
+
+function musicStopForMission() {
+  musicFadeTo(0, 800);
+}
 
 function enterTitle() {
   scene = 'title';
@@ -1071,6 +1113,17 @@ function renderTitle() {
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(100,130,180,0.5)';
   ctx.fillText('A/D \u00b7 Rotate   \u2003W/Space \u00b7 Thrust   \u2003E \u00b7 Prograde   \u2003Q \u00b7 Retrograde   \u20031\u20134 \u00b7 Warp   \u2003R \u00b7 Restart',CX,row2Y+cH+48);
+
+  // Music attribution — bottom-left
+  { ctx.save();
+    ctx.textAlign='left';
+    ctx.font='400 13px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle='rgba(100,130,180,0.38)';
+    ctx.fillText('"Rocket" Kevin MacLeod (incompetech.com)',20,H-42);
+    ctx.fillText('Licensed under Creative Commons: By Attribution 4.0',20,H-26);
+    ctx.fillText('http://creativecommons.org/licenses/by/4.0/',20,H-10);
+    ctx.restore(); }
+
   ctx.textAlign='left';
 }
 
@@ -2086,7 +2139,7 @@ function setTouchUIVisible(vis) {
     if (vis) el.classList.remove('hidden');
     else     el.classList.add('hidden');
   });
-  if (vis) resetWarpCycleBtn();
+  if (vis) { resetWarpCycleBtn(); musicStopForMission(); }
 }
 
 let lastNow = null;
