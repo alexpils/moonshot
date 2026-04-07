@@ -47,7 +47,8 @@ const M0_S1_THRUST  = 1100;    // stage 1 thrust (fights gravity+drag hard)
 const M0_S2_THRUST  = 380;    // stage 2 (upper stage, efficient)
 const M3_ORBIT_MIN  = 440;
 const M3_ORBIT_MAX  = 540;
-const M3_HOLD       = 30;
+const M3_HOLD       = 60;
+const M4_HOLD       = 30;
 const M3_THRUST     = 110;
 
 const canvas = document.getElementById('game');
@@ -1451,9 +1452,9 @@ function evalM4State(dE,dM,realDt) {
   var inB=dE>=M4_STABLE_MIN&&dE<=M4_STABLE_R;
   if (inB) {
     m4State.stableTimer+=realDt;
-    var rem=Math.max(0,STABLE_HOLD-m4State.stableTimer);
+    var rem=Math.max(0,M4_HOLD-m4State.stableTimer);
     m4State.message=rem>0?'HOLDING EARTH ORBIT\u2026':'EARTH ORBIT ACHIEVED!';
-    if (m4State.stableTimer>=STABLE_HOLD&&!transition.active){
+    if (m4State.stableTimer>=M4_HOLD&&!transition.active){
       endM4('win','MISSION COMPLETE');
       missionLog.m4={time:(performance.now()-m4State.missionStartTime)/1000,fuel:m4Rocket.fuel,maxSpeed:m4State.maxSpeed};
       transition.start(function(){scene='endgame';});
@@ -1575,7 +1576,7 @@ function drawM4HUD(moon) {
   drawFuelBar(fuelPct,m4Rocket.fuel);
   drawSpeedGauge(speed);
   if (m4State.outcome==='playing'&&m4State.stableTimer>0) {
-    var rem=Math.max(0,STABLE_HOLD-m4State.stableTimer),prog=m4State.stableTimer/STABLE_HOLD;
+    var rem=Math.max(0,M4_HOLD-m4State.stableTimer),prog=m4State.stableTimer/M4_HOLD;
     var cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
     ctx.save();
     ctx.beginPath();ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2);ctx.strokeStyle='rgba(96,165,250,0.12)';ctx.lineWidth=14;ctx.stroke();
