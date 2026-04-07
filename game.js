@@ -1559,7 +1559,7 @@ function resetM4(startFuel) {
   var vC=Math.sqrt(G*MOON_MASS/midR);
   var mvx=-Math.sin(a0)*MOON_ORBIT*MOON_OMEGA, mvy=Math.cos(a0)*MOON_ORBIT*MOON_OMEGA;
   m4State={warpIdx:0,moonAngle:a0,earthAngle:0,orientMode:'retrograde',outcome:'playing',
-    message:'IN LUNAR ORBIT \u2014 BURN RETROGRADE TO RETURN HOME',stableTimer:0,trail:[]};
+    message:'IN LUNAR ORBIT \u2014 BURN RETROGRADE TO RETURN HOME',stableTimer:0,trail:[],missionStartTime:performance.now(),maxSpeed:0};
   m4Rocket={x:moon.x+Math.cos(spA)*midR,y:moon.y+Math.sin(spA)*midR,
     vx:-Math.sin(spA)*vC+mvx,vy:Math.cos(spA)*vC+mvy,angle:spA+Math.PI/2,fuel:startFuel};
   document.getElementById('btn-prograde')?.classList.toggle('pressed',false);
@@ -1733,6 +1733,7 @@ function resetM0() {
     trail: [], stableTimer: 0, stage: 1,
     stage1: null, // falling stage object {x,y,vx,vy}
     launched: false,
+    missionStartTime: performance.now(), maxSpeed: 0,
   };
   m0Rocket = { x: CX, y: H-35, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
   document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
@@ -2209,11 +2210,11 @@ state  = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', 
 lState = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], fromOrbit: false };
 rocket  = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 lRocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
-m0State = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, stage: 1, stage1: null };
+m0State = { orientMode: 'prograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, stage: 1, stage1: null, missionStartTime: performance.now(), maxSpeed: 0 };
 m0Rocket = { x: CX, y: H-35, vx: 0, vy: 0, angle: -Math.PI/2, fuel: 100 };
 m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0 };
 m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
-m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0 };
+m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0, missionStartTime: performance.now(), maxSpeed: 0 };
 m4Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 
 requestAnimationFrame(loop);
