@@ -100,6 +100,7 @@ const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m0OrbitDir = 1; // 1 = CW/east (default, original), -1 = CCW/west (set when M0 exits west)
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
+let landingEntryFuel = 100; // fuel at M2 start in single mode
 let m4EntryFuel  = 100;  // fuel at M4 start
 
 // Fade transition state
@@ -225,9 +226,9 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.modeSingleBtn)) { missionMode = 'single'; }
     if (hit(uiHitBoxes.mission0)) { scene = 'm0'; resetM0(); setTouchUIVisible(true); }
     if (hit(uiHitBoxes.mission1) && missionMode !== 'full' && progress.mission0Beaten) { scene = 'orbit'; resetGame(); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission2) && missionMode !== 'full' && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; resetLanding(null); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission3) && missionMode !== 'full' && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 100; resetM3(100); setTouchUIVisible(true); }
-    if (hit(uiHitBoxes.mission4) && missionMode !== 'full' && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 100; resetM4(100); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission2) && missionMode !== 'full' && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; landingEntryFuel = 80; resetLanding(null,80); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission3) && missionMode !== 'full' && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 60; resetM3(60); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.mission4) && missionMode !== 'full' && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 40; resetM4(40); setTouchUIVisible(true); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -264,7 +265,7 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.backToTitle) && state.outcome !== 'playing') enterTitle();
   }
   if (scene === 'landing') {
-    if (hit(uiHitBoxes.retryLanding)) resetLanding(orbitHandoff);
+    if (hit(uiHitBoxes.retryLanding)) resetLanding(orbitHandoff, landingEntryFuel);
     if (hit(uiHitBoxes.backToTitle))  enterTitle();
   }
   if (scene === 'm3') {
@@ -333,7 +334,8 @@ const collisionFilter = {
 // GAME RESET (ORBIT)
 // ════════════════════════════════════════════════════════════════════════════
 
-function resetGame() {
+function resetGame(startFuel) {
+  if (startFuel === undefined) startFuel = 100;
   collisionFilter.reset(); pathLengthFilter.reset(); camera.reset();
   uiHitBoxes.beginDescent = null; uiHitBoxes.backToTitle = null;
 
@@ -349,7 +351,7 @@ function resetGame() {
   const circV = Math.sqrt(G * EARTH_MASS / r0);
   // m0OrbitDir: 1=CW/east (original default), -1=CCW/west. Set by M0 exit direction.
   const dir = m0OrbitDir;
-  rocket = { x, y, vx: -Math.sin(ang)*circV*dir, vy: Math.cos(ang)*circV*dir, angle: ang+Math.PI/2, fuel: 100 };
+  rocket = { x, y, vx: -Math.sin(ang)*circV*dir, vy: Math.cos(ang)*circV*dir, angle: ang+Math.PI/2, fuel: startFuel };
 
   document.getElementById('btn-prograde')?.classList.toggle('pressed', true);
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
@@ -359,12 +361,12 @@ function resetGame() {
 // LANDING RESET
 // ════════════════════════════════════════════════════════════════════════════
 
-function resetLanding(handoff) {
+function resetLanding(handoff, singleFuel) {
   collisionFilter.reset(); pathLengthFilter.reset();
   uiHitBoxes.retryLanding = null; uiHitBoxes.backToTitle = null;
 
   const startAngle = handoff ? handoff.relAngle : -Math.PI / 2;
-  const startFuel  = handoff ? handoff.fuel     : 100;
+  const startFuel  = handoff ? handoff.fuel : (singleFuel !== undefined ? singleFuel : 100);
   const lx = CX + Math.cos(startAngle) * LAND_ORBIT_R;
   const ly = CY + Math.sin(startAngle) * LAND_ORBIT_R;
 
@@ -2152,7 +2154,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='m0')resetM0(); else if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='m0')resetM0(); else if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff,landingEntryFuel); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
