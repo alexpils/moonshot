@@ -2070,19 +2070,23 @@ function drawM0OutcomeBanner(){
   drawOutcomeBanner(m0State.outcome,m0State.message,{retryKey:'retryM0',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  ORBIT ACHIEVED',winLine2:'STAGE 1 SEPARATED — MISSION COMPLETE',hint:'Pitch over after launch to go downrange'});
 }
 
-var _bottomBar, _leftCtrl, _rightCtrl;
+var _leftCtrl, _rightCtrl;
 function initTouchUI() {
-  _bottomBar = document.querySelector('.bottom-bar');
   _leftCtrl  = document.querySelector('.side-ctrl.left-ctrl');
   _rightCtrl = document.querySelector('.side-ctrl.right-ctrl');
   setTouchUIVisible(false);
 }
+function resetWarpCycleBtn() {
+  const btn = document.getElementById('btn-warp-cycle');
+  if (btn) btn.textContent = '1×';
+}
 function setTouchUIVisible(vis) {
-  [_bottomBar, _leftCtrl, _rightCtrl].forEach(function(el){
+  [_leftCtrl, _rightCtrl].forEach(function(el){
     if (!el) return;
     if (vis) el.classList.remove('hidden');
     else     el.classList.add('hidden');
   });
+  if (vis) resetWarpCycleBtn();
 }
 
 let lastNow = null;
@@ -2140,7 +2144,7 @@ function loop(now) {
 (function suppressLongPress() {
   document.addEventListener('contextmenu',e=>e.preventDefault(),{passive:false});
   document.addEventListener('selectstart',e=>e.preventDefault(),{passive:false});
-  document.addEventListener('touchstart',e=>{ if (e.target.tagName==='BUTTON'||e.target.closest('.side-ctrl,.bottom-bar,.fullscreen-btn')) e.preventDefault(); },{passive:false});
+  document.addEventListener('touchstart',e=>{ if (e.target.tagName==='BUTTON'||e.target.closest('.side-ctrl,.fullscreen-btn')) e.preventDefault(); },{passive:false});
 })();
 
 (function initOrientButtons() {
@@ -2188,6 +2192,28 @@ function loop(now) {
   window.addEventListener('keydown',e=>{
     const map={Digit1:0,Digit2:1,Digit3:2,Digit4:3};
     if (map[e.code]!==undefined) document.querySelectorAll('.warp-btn').forEach((b,j)=>b.classList.toggle('active',j===map[e.code]));
+  });
+
+  // Warp cycle button (mobile side panel)
+  const warpCycleBtn = document.getElementById('btn-warp-cycle');
+  if (warpCycleBtn) {
+    warpCycleBtn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const tgt = scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:(scene==='m0'?m0State:state)));
+      if (!tgt) return;
+      tgt.warpIdx = (tgt.warpIdx + 1) % WARP_LEVELS.length;
+      warpCycleBtn.textContent = WARP_LEVELS[tgt.warpIdx] + '×';
+      // Sync hidden desktop warp buttons
+      document.querySelectorAll('.warp-btn').forEach((b,j) => b.classList.toggle('active', j===tgt.warpIdx));
+    }, {passive:false});
+  }
+
+  // Also sync warp cycle btn label when keyboard warp keys used
+  window.addEventListener('keydown', e => {
+    const map = {Digit1:0,Digit2:1,Digit3:2,Digit4:3};
+    if (map[e.code] !== undefined && warpCycleBtn) {
+      warpCycleBtn.textContent = WARP_LEVELS[map[e.code]] + '×';
+    }
   });
 
   const rb=document.getElementById('btn-restart');

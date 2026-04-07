@@ -6,7 +6,7 @@
   --text: #e7f0ff;
   --muted: #98a7cc;
   --side-w: 80px;   /* width of each side control column */
-  --bottom-h: 52px; /* height of warp/restart bar */
+  --bottom-h: 0px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -78,20 +78,7 @@ canvas {
   box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03);
 }
 
-/* ── Bottom bar ── */
-.bottom-bar {
-  height: var(--bottom-h);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 0 16px;
-  background: rgba(5, 8, 22, 0.6);
-  border-top: 1px solid rgba(100,140,255,0.12);
-}
-
-.warp-btns { display: flex; gap: 8px; }
+/* ── Bottom bar (removed — warp+restart moved to side panels) ── */
 
 .warp-btn, .restart-btn {
   background: rgba(30, 40, 80, 0.85);
@@ -160,8 +147,6 @@ canvas {
 @media (hover: hover) and (pointer: fine) {
   /* Keep side panels but hide the touch-only move buttons */
   .move-btn    { display: none; }
-  .bottom-bar  { display: none; }
-  :root        { --bottom-h: 0px; }
   .game-shell  { padding: 4px; }
   canvas       { max-height: 100vh; border-radius: 18px; }
 /* Shrink side panels to just fit the orient buttons */
@@ -177,7 +162,7 @@ canvas {
 
 
 
-.bottom-bar.hidden, .side-ctrl.hidden { display: none !important; }
+.side-ctrl.hidden { display: none !important; }
 
 
 /* Hide fullscreen button on desktop (less needed, keyboard F11 works) */
@@ -197,6 +182,32 @@ button, canvas, .game-row, .side-ctrl, .bottom-bar {
 /* Prevent iOS magnifier / callout on buttons */
 button {
   -webkit-touch-callout: none;
+}
+
+/* ── Side extra buttons (warp cycle + restart) ── */
+.side-extra-btn {
+  width: 64px;
+  height: 40px;
+  margin-top: 20px; /* visual gap from controls above */
+  border: 1.5px solid rgba(100,160,255,0.25);
+  border-radius: 10px;
+  background: rgba(20, 30, 70, 0.75);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.08s, transform 0.08s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.side-extra-btn:active { background: rgba(59,130,246,0.4); transform: scale(0.93); }
+.restart-side-btn { color: #fca5a5; border-color: rgba(248,113,113,0.25); }
+/* Hide on desktop — keyboard handles warp, menu btn covers restart */
+@media (hover: hover) and (pointer: fine) {
+  .side-extra-btn { display: none; }
 }
 
 /* ── PRO / RETRO orientation buttons ── */
