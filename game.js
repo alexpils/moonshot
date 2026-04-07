@@ -2223,6 +2223,21 @@ function loop(now) {
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
 })();
 
+
+// Portrait hint — JS-driven for reliability across all mobile browsers
+(function initPortraitHint() {
+  const hint = document.querySelector('.portrait-hint');
+  if (!hint) return;
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  function check() {
+    const portrait = window.innerHeight > window.innerWidth;
+    hint.style.display = (isTouch && portrait) ? 'flex' : 'none';
+  }
+  window.addEventListener('resize', check);
+  window.addEventListener('orientationchange', check);
+  check();
+})();
+
 if ('ontouchstart' in window||navigator.maxTouchPoints>0) {
   const ov=document.querySelector('.overlay'); if (ov) ov.style.display='none';
 }

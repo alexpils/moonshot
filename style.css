@@ -298,6 +298,4 @@ button {
   60%  { transform: rotate(90deg); }
   100% { transform: rotate(90deg); }
 }
-@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-  .portrait-hint { display: flex; }
-}
+/* Portrait hint visibility controlled by JS for cross-device reliability */
