@@ -195,7 +195,7 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('keyup', e => keys.delete(e.code));
 
-canvas.addEventListener('pointerdown', function(e){e.preventDefault();handleCanvasClick(e);},{passive:false});
+canvas.addEventListener('pointerdown', function(e){e.preventDefault();musicPlayTitle();handleCanvasClick(e);},{passive:false});
 canvas.addEventListener('pointermove', function(e){
   if (scene!=='title') return;
   const rect=canvas.getBoundingClientRect();
@@ -207,6 +207,7 @@ canvas.addEventListener('pointermove', function(e){
 // ── MUSIC ─────────────────────────────────────────────────────────────────────
 const bgMusic = document.getElementById('bg-music');
 let musicStarted = false;
+// Music unlocked via fullscreen button (guaranteed user gesture) or canvas tap
 let musicFadeTimer = null;
 
 function musicFadeTo(targetVol, durationMs) {
@@ -228,20 +229,7 @@ function musicFadeTo(targetVol, durationMs) {
   }, stepMs);
 }
 
-window.addEventListener('load', function() {
-  if (bgMusic) {
-    bgMusic.volume = 0;
-    bgMusic.play().catch(() => {
-      // Autoplay blocked — fall back to first interaction
-      document.addEventListener('pointerdown', function startOnInteract() {
-        musicPlayTitle();
-        document.removeEventListener('pointerdown', startOnInteract);
-      }, { once: true });
-    });
-    musicFadeTo(0.55, 2000);
-    musicStarted = true;
-  }
-});
+// Music starts on first title screen interaction (browser autoplay policy requires user gesture)
 
 function musicPlayTitle() {
   if (!bgMusic) return;
@@ -1129,16 +1117,26 @@ function renderTitle() {
   ctx.fillStyle='rgba(100,130,180,0.5)';
   ctx.fillText('A/D \u00b7 Rotate   \u2003W/Space \u00b7 Thrust   \u2003E \u00b7 Prograde   \u2003Q \u00b7 Retrograde   \u20031\u20134 \u00b7 Warp   \u2003R \u00b7 Restart',CX,row2Y+cH+48);
 
-  // Music attribution — bottom-left
+  // Music attribution — bottom-left with padded background
   { ctx.save();
+    ctx.font='600 20px Inter,ui-sans-serif,sans-serif';
+    // Measure widest line for background box
+    var attrLines=['"Rocket" Kevin MacLeod (incompetech.com)','Licensed under Creative Commons: By Attribution 4.0','http://creativecommons.org/licenses/by/4.0/'];
+    var attrMaxW=Math.max(...attrLines.map(l=>ctx.measureText(l).width));
+    var attrPadX=14,attrPadY=10,attrLineH=24,attrX=16,attrY=H-100;
+    var attrBoxW=attrMaxW+attrPadX*2, attrBoxH=attrLines.length*attrLineH+attrPadY*2;
+    ctx.fillStyle='rgba(5,8,22,0.72)';
+    rrect(attrX,attrY,attrBoxW,attrBoxH,8); ctx.fill();
+    ctx.strokeStyle='rgba(100,130,180,0.18)'; ctx.lineWidth=1;
+    rrect(attrX,attrY,attrBoxW,attrBoxH,8); ctx.stroke();
     ctx.textAlign='left';
-    ctx.font='500 16px Inter,ui-sans-serif,sans-serif';
-    ctx.fillStyle='rgba(148,175,220,0.65)';
-    ctx.fillText('"Rocket" Kevin MacLeod (incompetech.com)',20,H-46);
-    ctx.font='400 15px Inter,ui-sans-serif,sans-serif';
-    ctx.fillStyle='rgba(120,150,200,0.55)';
-    ctx.fillText('Licensed under Creative Commons: By Attribution 4.0',20,H-28);
-    ctx.fillText('http://creativecommons.org/licenses/by/4.0/',20,H-10);
+    ctx.font='600 20px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle='rgba(148,175,220,0.80)';
+    ctx.fillText(attrLines[0],attrX+attrPadX,attrY+attrPadY+18);
+    ctx.font='400 18px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle='rgba(120,150,200,0.70)';
+    ctx.fillText(attrLines[1],attrX+attrPadX,attrY+attrPadY+18+attrLineH);
+    ctx.fillText(attrLines[2],attrX+attrPadX,attrY+attrPadY+18+attrLineH*2);
     ctx.restore(); }
 
   ctx.textAlign='left';
@@ -2202,7 +2200,7 @@ function loop(now) {
       if (el.requestFullscreen) el.requestFullscreen({navigationUI:'hide'}); else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     } else { if (document.exitFullscreen) document.exitFullscreen(); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); }
   }
-  btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleFS();},{passive:false});
+  btn.addEventListener('pointerdown',e=>{e.preventDefault();musicPlayTitle();toggleFS();},{passive:false});
   const menuBtn=document.getElementById('btn-menu');
   if (menuBtn) menuBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(scene!=='title')enterTitle();},{passive:false});
 
