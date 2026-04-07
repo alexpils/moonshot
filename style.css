@@ -262,3 +262,38 @@ button {
 /* When in actual fullscreen mode, hide the button */
 :fullscreen .fullscreen-btn,
 :-webkit-full-screen .fullscreen-btn { display: none; }
+
+/* ── Portrait rotate hint (touch devices only) ── */
+.portrait-hint {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(5, 8, 22, 0.96);
+  align-items: center;
+  justify-content: center;
+  color: #c8d8f8;
+  font-family: Inter, ui-sans-serif, sans-serif;
+}
+.portrait-hint-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.portrait-hint-icon {
+  font-size: 56px;
+  animation: rotate-hint 2s ease-in-out infinite;
+}
+@keyframes rotate-hint {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(90deg); }
+  60%  { transform: rotate(90deg); }
+  100% { transform: rotate(90deg); }
+}
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  .portrait-hint { display: flex; }
+}
