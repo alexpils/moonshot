@@ -92,7 +92,8 @@ const LAND_CRATERS = [
 // ════════════════════════════════════════════════════════════════════════════
 
 let scene = 'title';
-let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4'
+let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4' | 'endgame'
+const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null };
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
@@ -272,6 +273,10 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.retryM4))    resetM4(m4EntryFuel);
     if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
+  if (scene === 'endgame') {
+    if (hit(uiHitBoxes.playAgain))   { scene='m0'; resetM0(); setTouchUIVisible(true); }
+    if (hit(uiHitBoxes.backToTitle)) enterTitle();
+  }
 }
 
 
@@ -330,6 +335,7 @@ function resetGame() {
     warpIdx: 0, moonAngle: 0, earthAngle: 0, orientMode: 'prograde',
     outcome: 'playing', message: 'BURN PROGRADE TO REACH THE MOON',
     stableTimer: 0, trail: [],
+    missionStartTime: performance.now(), maxSpeed: 0,
   };
 
   const r0 = 75, ang = -Math.PI / 2;
@@ -375,6 +381,7 @@ function resetLanding(handoff) {
     warpIdx: 0, orientMode: 'prograde', outcome: 'playing',
     message: 'IN LUNAR ORBIT \u2014 INITIATE DESCENT',
     trail: [], fromOrbit: !!handoff,
+    missionStartTime: performance.now(), maxSpeed: 0,
   };
   lRocket = {
     x: lx, y: ly, vx, vy,
@@ -400,6 +407,7 @@ function resetM3(startFuel = 100) {
     warpIdx: 0, orientMode: null, outcome: 'playing',
     message: 'LAUNCH FROM THE MOON \u2014 ESTABLISH ORBIT',
     trail: [], stableTimer: 0, launched: false,
+    missionStartTime: performance.now(), maxSpeed: 0,
   };
   m3Rocket = {
     x: padX, y: padY, vx: 0, vy: 0,
@@ -501,6 +509,7 @@ function updatePhysics(realDt) {
     if (thrusting) { rocket.vx+=Math.cos(rocket.angle)*THRUST*dt; rocket.vy+=Math.sin(rocket.angle)*THRUST*dt; rocket.fuel=Math.max(0,rocket.fuel-FUEL_DRAIN*dt); }
     rocket.vx+=(gE.ax+gM.ax)*dt; rocket.vy+=(gE.ay+gM.ay)*dt;
     rocket.x+=rocket.vx*dt; rocket.y+=rocket.vy*dt;
+    {const _s=Math.hypot(rocket.vx,rocket.vy);if(_s>state.maxSpeed)state.maxSpeed=_s;}
     const last=state.trail[state.trail.length-1];
     if (!last||Math.hypot(rocket.x-last.x,rocket.y-last.y)>3) { state.trail.push({x:rocket.x,y:rocket.y}); if (state.trail.length>TRAIL_MAX) state.trail.shift(); }
     evalState(gE.dist,gM.dist,realDt);
@@ -519,6 +528,7 @@ function evalState(dEarth,dMoon,realDt) {
     state.message=rem>0?'HOLDING LUNAR ORBIT\u2026':'STABLE LUNAR ORBIT ACHIEVED!';
     if (state.stableTimer>=STABLE_HOLD) {
       end('win','LUNAR ORBIT ACHIEVED');
+      missionLog.m1={time:(performance.now()-state.missionStartTime)/1000,fuel:rocket.fuel,maxSpeed:state.maxSpeed};
       // Capture handoff immediately and begin seamless transition
       const _moon   = moonXY(state.moonAngle);
       const _relX   = rocket.x - _moon.x, _relY = rocket.y - _moon.y;
@@ -585,6 +595,7 @@ function updateLandingPhysics(realDt) {
     const gM=gravAccel(CX,CY,MOON_MASS,lRocket.x,lRocket.y);
     lRocket.vx+=gM.ax*dt; lRocket.vy+=gM.ay*dt;
     lRocket.x+=lRocket.vx*dt; lRocket.y+=lRocket.vy*dt;
+    {const _s=Math.hypot(lRocket.vx,lRocket.vy);if(_s>lState.maxSpeed)lState.maxSpeed=_s;}
     const last=lState.trail[lState.trail.length-1];
     if (!last||Math.hypot(lRocket.x-last.x,lRocket.y-last.y)>3) { lState.trail.push({x:lRocket.x,y:lRocket.y}); if (lState.trail.length>TRAIL_MAX) lState.trail.shift(); }
     evalLandingState(gM.dist);
@@ -604,6 +615,7 @@ function evalLandingState(distToMoon) {
     if (onPad&&spd<=LAND_SPEED_MAX) {
       endLanding('win','TOUCHDOWN! MISSION COMPLETE');
       progress.unlockMission2();
+      missionLog.m2={time:(performance.now()-lState.missionStartTime)/1000,fuel:lRocket.fuel,maxSpeed:lState.maxSpeed};
       const _m3Fuel = lRocket.fuel;
       m3EntryFuel = _m3Fuel;
       transition.start(()=>{ scene='m3'; resetM3(_m3Fuel); });
@@ -655,6 +667,7 @@ function updateM3Physics(realDt) {
     const gM=gravAccel(CX,CY,MOON_MASS,m3Rocket.x,m3Rocket.y);
     if (m3State.launched) { m3Rocket.vx+=gM.ax*dt; m3Rocket.vy+=gM.ay*dt; }
     m3Rocket.x+=m3Rocket.vx*dt; m3Rocket.y+=m3Rocket.vy*dt;
+    {const _s=Math.hypot(m3Rocket.vx,m3Rocket.vy);if(_s>m3State.maxSpeed)m3State.maxSpeed=_s;}
     const last=m3State.trail[m3State.trail.length-1];
     if (!last||Math.hypot(m3Rocket.x-last.x,m3Rocket.y-last.y)>3) {
       m3State.trail.push({x:m3Rocket.x,y:m3Rocket.y});
@@ -669,6 +682,7 @@ function updateM3Physics(realDt) {
     if (m3State.stableTimer>=M3_HOLD&&!transition.active) {
       endM3('win','MISSION COMPLETE');
       progress.unlockMission3();
+      missionLog.m3={time:(performance.now()-m3State.missionStartTime)/1000,fuel:m3Rocket.fuel,maxSpeed:m3State.maxSpeed};
       var _m4f=m3Rocket.fuel; m4EntryFuel=_m4f;
       transition.start(function(){scene='m4';resetM4(_m4f);});
     }
@@ -867,6 +881,66 @@ function drawOutcomeBanner(outcome, message, opts) {
   }
   ctx.textAlign='left'; ctx.restore();
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ENDGAME WIN SCREEN
+// ════════════════════════════════════════════════════════════════════════════
+function formatTime(s){if(s==null)return'\u2014';var m=Math.floor(s/60),sec=Math.floor(s%60);return m>0?m+'m '+sec+'s':sec+'s';}
+function renderEndgame(){
+  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.setLineDash([]);
+  var bg=ctx.createRadialGradient(CX,CY,80,CX,CY,H);
+  bg.addColorStop(0,'#0a1028');bg.addColorStop(1,'#020610');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  for(var st of STARS){ctx.globalAlpha=st.a*0.6;ctx.fillStyle='#dbeafe';ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,Math.PI*2);ctx.fill();}
+  ctx.globalAlpha=1;ctx.textAlign='center';
+  ctx.font='800 52px Inter,ui-sans-serif,sans-serif';
+  var hg=ctx.createLinearGradient(CX-300,0,CX+300,0);
+  hg.addColorStop(0,'#86efac');hg.addColorStop(0.5,'#d9f99d');hg.addColorStop(1,'#86efac');
+  ctx.fillStyle=hg;ctx.fillText('\uD83C\uDF0D  MISSION ACCOMPLISHED',CX,92);
+  ctx.font='400 22px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(148,220,160,0.65)';
+  ctx.fillText('All five missions complete \u2014 you flew to the Moon and back.',CX,132);
+  var missions=[
+    {key:'m0',label:'M00',name:'Launch',icon:'\uD83D\uDE80'},
+    {key:'m1',label:'M01',name:'Lunar Orbit',icon:'\uD83C\uDF0D'},
+    {key:'m2',label:'M02',name:'Lunar Landing',icon:'\uD83C\uDF15'},
+    {key:'m3',label:'M03',name:'Lunar Ascent',icon:'\uD83D\uDE80'},
+    {key:'m4',label:'M04',name:'Return Home',icon:'\uD83C\uDF0D'},
+  ];
+  var colW=198,tableW=colW*5,tableX=CX-tableW/2,headerY=200,rowH=90,firstRowY=252;
+  ctx.font='700 15px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(148,175,220,0.5)';ctx.textAlign='left';
+  ['MISSION','TIME','FUEL LEFT','MAX SPEED','RATING'].forEach(function(h,i){ctx.fillText(h,tableX+i*colW+(i===0?0:14),headerY);});
+  ctx.strokeStyle='rgba(100,140,255,0.18)';ctx.lineWidth=1;ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(tableX,headerY+14);ctx.lineTo(tableX+tableW,headerY+14);ctx.stroke();
+  missions.forEach(function(m,i){
+    var log=missionLog[m.key],y=firstRowY+i*rowH;
+    ctx.fillStyle=i%2===0?'rgba(255,255,255,0.03)':'rgba(0,0,0,0)';
+    ctx.fillRect(tableX-8,y-28,tableW+16,rowH-4);
+    ctx.textAlign='left';
+    ctx.font='700 18px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='#c8d8f8';
+    ctx.fillText(m.icon+' '+m.name,tableX,y);
+    ctx.font='500 13px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(100,140,200,0.55)';
+    ctx.fillText(m.label,tableX,y+20);
+    if(!log){ctx.font='500 16px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(150,150,180,0.35)';ctx.fillText('\u2014',tableX+colW+14,y);return;}
+    ctx.font='600 20px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='#e2e8f8';
+    ctx.fillText(formatTime(log.time),tableX+colW+14,y);
+    var fp=Math.round(log.fuel);
+    ctx.fillStyle=fp>=50?'#86efac':fp>=25?'#fde68a':'#fca5a5';
+    ctx.fillText(fp+'%',tableX+colW*2+14,y);
+    ctx.fillStyle='#e2e8f8';
+    ctx.fillText(Math.round(log.maxSpeed)+' u/s',tableX+colW*3+14,y);
+    ctx.font='22px sans-serif';
+    ctx.fillText('\u2B50'.repeat(fp>=60?3:fp>=30?2:1),tableX+colW*4+14,y+2);
+  });
+  var divY=firstRowY+missions.length*rowH-2;
+  ctx.strokeStyle='rgba(100,140,255,0.18)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(tableX,divY);ctx.lineTo(tableX+tableW,divY);ctx.stroke();
+  ctx.setLineDash([]);
+  var btnY=divY+52;
+  drawCanvasBtn('playAgain','\u21ba  Play Again',CX-242,btnY,220,52,{fill:'rgba(12,30,20,0.95)',stroke:'rgba(134,239,172,0.5)',color:'#86efac',fs:'700 20px Inter,ui-sans-serif,sans-serif'});
+  drawCanvasBtn('backToTitle','\u2190  Main Menu',CX+22,btnY,220,52,{fill:'rgba(10,15,30,0.9)',stroke:'rgba(100,130,200,0.4)',color:'#8899cc',fs:'600 20px Inter,ui-sans-serif,sans-serif'});
+  transition.draw();
+}
+
 
 function renderTitle() {
   ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.setLineDash([]);
@@ -1379,7 +1453,11 @@ function evalM4State(dE,dM,realDt) {
     m4State.stableTimer+=realDt;
     var rem=Math.max(0,STABLE_HOLD-m4State.stableTimer);
     m4State.message=rem>0?'HOLDING EARTH ORBIT\u2026':'EARTH ORBIT ACHIEVED!';
-    if (m4State.stableTimer>=STABLE_HOLD&&!transition.active){endM4('win','MISSION COMPLETE');transition.start(function(){scene='title';});}
+    if (m4State.stableTimer>=STABLE_HOLD&&!transition.active){
+      endM4('win','MISSION COMPLETE');
+      missionLog.m4={time:(performance.now()-m4State.missionStartTime)/1000,fuel:m4Rocket.fuel,maxSpeed:m4State.maxSpeed};
+      transition.start(function(){scene='endgame';});
+    }
   } else {
     m4State.stableTimer=0;
     var dE2=Math.hypot(m4Rocket.x-CX,m4Rocket.y-CY);
@@ -1412,6 +1490,7 @@ function updateM4Physics(realDt) {
     var moon=moonXY(m4State.moonAngle),gE=gravAccel(CX,CY,EARTH_MASS,m4Rocket.x,m4Rocket.y),gM=gravAccel(moon.x,moon.y,MOON_MASS,m4Rocket.x,m4Rocket.y);
     if (thr){m4Rocket.vx+=Math.cos(m4Rocket.angle)*THRUST*dt;m4Rocket.vy+=Math.sin(m4Rocket.angle)*THRUST*dt;m4Rocket.fuel=Math.max(0,m4Rocket.fuel-FUEL_DRAIN*dt);}
     m4Rocket.vx+=(gE.ax+gM.ax)*dt;m4Rocket.vy+=(gE.ay+gM.ay)*dt;m4Rocket.x+=m4Rocket.vx*dt;m4Rocket.y+=m4Rocket.vy*dt;
+    {var _s=Math.hypot(m4Rocket.vx,m4Rocket.vy);if(_s>m4State.maxSpeed)m4State.maxSpeed=_s;}
     var last=m4State.trail[m4State.trail.length-1];
     if (!last||Math.hypot(m4Rocket.x-last.x,m4Rocket.y-last.y)>3){m4State.trail.push({x:m4Rocket.x,y:m4Rocket.y});if(m4State.trail.length>TRAIL_MAX)m4State.trail.shift();}
   }
@@ -1593,6 +1672,7 @@ function updateM0Physics(realDt) {
     }
 
     m0Rocket.x+=m0Rocket.vx*dt; m0Rocket.y+=m0Rocket.vy*dt;
+    {var _s=Math.hypot(m0Rocket.vx,m0Rocket.vy);if(_s>m0State.maxSpeed)m0State.maxSpeed=_s;}
 
     // Falling stage 1 — simple gravity, no drag
     if (m0State.stage1) {
@@ -1624,6 +1704,7 @@ function updateM0Physics(realDt) {
       if (m0State.stableTimer>=M0_HOLD&&!transition.active) {
         endM0('win','ORBIT ACHIEVED');
         progress.unlockMission0();
+        missionLog.m0={time:(performance.now()-m0State.missionStartTime)/1000,fuel:m0Rocket.fuel,maxSpeed:m0State.maxSpeed};
         transition.start(function(){scene='orbit';resetGame();});
       }
     } else {
@@ -1894,7 +1975,8 @@ function loop(now) {
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
   transition.update(realDt);
 
-  if (scene==='title')        renderTitle();
+  if (scene==='endgame')      renderEndgame();
+  else if (scene==='title')  renderTitle();
   else if (scene==='m0')      renderM0();
   else if (scene==='orbit')   render();
   else if (scene==='landing') renderLanding();
