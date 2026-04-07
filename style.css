@@ -152,7 +152,8 @@ canvas {
 /* Shrink side panels to just fit the orient buttons */
   .side-ctrl   { width: 64px; justify-content: center; gap: 8px; }
   /* Add keyboard hint to orient buttons via title tooltip */
-  .orient-btn  { cursor: pointer; }
+  .orient-btn      { cursor: pointer; }
+  .side-extra-btn  { display: none; }
 }
 
 
@@ -205,10 +206,7 @@ button {
 }
 .side-extra-btn:active { background: rgba(59,130,246,0.4); transform: scale(0.93); }
 .restart-side-btn { color: #fca5a5; border-color: rgba(248,113,113,0.25); }
-/* Hide on desktop — keyboard handles warp, menu btn covers restart */
-@media (hover: hover) and (pointer: fine) {
-  .side-extra-btn { display: none; }
-}
+/* Hidden on desktop via main desktop media query below */
 
 /* ── PRO / RETRO orientation buttons ── */
 .orient-btn {
