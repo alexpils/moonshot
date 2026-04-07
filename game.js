@@ -195,7 +195,7 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('keyup', e => keys.delete(e.code));
 
-canvas.addEventListener('pointerdown', function(e){e.preventDefault();if(scene==='title'&&!musicStarted)musicPlayTitle();handleCanvasClick(e);},{passive:false});
+canvas.addEventListener('pointerdown', function(e){e.preventDefault();handleCanvasClick(e);},{passive:false});
 canvas.addEventListener('pointermove', function(e){
   if (scene!=='title') return;
   const rect=canvas.getBoundingClientRect();
@@ -227,6 +227,21 @@ function musicFadeTo(targetVol, durationMs) {
     }
   }, stepMs);
 }
+
+window.addEventListener('load', function() {
+  if (bgMusic) {
+    bgMusic.volume = 0;
+    bgMusic.play().catch(() => {
+      // Autoplay blocked — fall back to first interaction
+      document.addEventListener('pointerdown', function startOnInteract() {
+        musicPlayTitle();
+        document.removeEventListener('pointerdown', startOnInteract);
+      }, { once: true });
+    });
+    musicFadeTo(0.55, 2000);
+    musicStarted = true;
+  }
+});
 
 function musicPlayTitle() {
   if (!bgMusic) return;
@@ -1117,10 +1132,12 @@ function renderTitle() {
   // Music attribution — bottom-left
   { ctx.save();
     ctx.textAlign='left';
-    ctx.font='400 13px Inter,ui-sans-serif,sans-serif';
-    ctx.fillStyle='rgba(100,130,180,0.38)';
-    ctx.fillText('"Rocket" Kevin MacLeod (incompetech.com)',20,H-42);
-    ctx.fillText('Licensed under Creative Commons: By Attribution 4.0',20,H-26);
+    ctx.font='500 16px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle='rgba(148,175,220,0.65)';
+    ctx.fillText('"Rocket" Kevin MacLeod (incompetech.com)',20,H-46);
+    ctx.font='400 15px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle='rgba(120,150,200,0.55)';
+    ctx.fillText('Licensed under Creative Commons: By Attribution 4.0',20,H-28);
     ctx.fillText('http://creativecommons.org/licenses/by/4.0/',20,H-10);
     ctx.restore(); }
 
