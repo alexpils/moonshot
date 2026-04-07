@@ -778,8 +778,7 @@ function predictLandingPath() {
         const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R);
         const impactAngle=Math.atan2(sp.y-CY,sp.x-CX);
         let padDiff=impactAngle-PAD_ANGLE; while(padDiff>Math.PI)padDiff-=2*Math.PI; while(padDiff<-Math.PI)padDiff+=2*Math.PI;
-        const impactSpd=Math.hypot(pvx,pvy);
-        const onPadPred=Math.abs(padDiff)<PAD_HALF && impactSpd<=LAND_SPEED_MAX;
+        const onPadPred=Math.abs(padDiff)<PAD_HALF;
         col={x:sp.x,y:sp.y,body:onPadPred?'TOUCHDOWN':'MOON'};
         pts.push(sp); hit=true; break;
       }
@@ -819,20 +818,27 @@ function earthEclipseFactor(mx,my,sunX,sunY) {
 // ════════════════════════════════════════════════════════════════════════════
 
 function drawCollisionWarning(col) {
-  const {x,y,body}=col;
+  const {x,y,body,tdSafe,tdWarn}=col;
   const touchdown = body==='TOUCHDOWN';
   const t=(Date.now()/400)%(Math.PI*2), pulse=0.55+0.45*Math.sin(t);
-  const cr = touchdown?'74,222,128':'255,80,80';     // green vs red
-  const cl = touchdown?'134,239,172':'255,120,120';
+  // Color: green=safe TD, amber=on-pad but too fast, red=off-pad
+  const cr = tdSafe?'74,222,128':tdWarn?'251,191,36':'255,80,80';
+  const cl = tdSafe?'134,239,172':tdWarn?'253,211,77':'255,120,120';
   ctx.save();
   ctx.strokeStyle=`rgba(${cr},${(0.3+0.3*Math.sin(t)).toFixed(2)})`; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(x,y,22+6*Math.sin(t),0,Math.PI*2); ctx.stroke();
   ctx.strokeStyle=`rgba(${cr},${pulse.toFixed(2)})`; ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.arc(x,y,13,0,Math.PI*2); ctx.stroke();
   if (touchdown) {
-    // Checkmark instead of X
     ctx.strokeStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(x-6,y); ctx.lineTo(x-1,y+6); ctx.lineTo(x+7,y-6); ctx.stroke();
+    if (tdSafe) {
+      // Checkmark
+      ctx.beginPath(); ctx.moveTo(x-6,y); ctx.lineTo(x-1,y+6); ctx.lineTo(x+7,y-6); ctx.stroke();
+    } else {
+      // Down-arrow: slow down!
+      ctx.beginPath(); ctx.moveTo(x,y-6); ctx.lineTo(x,y+5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x-5,y+1); ctx.lineTo(x,y+6); ctx.lineTo(x+5,y+1); ctx.stroke();
+    }
   } else {
     ctx.strokeStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
     const s=7;
@@ -841,7 +847,7 @@ function drawCollisionWarning(col) {
   }
   const lY=y<CY?y+34:y-22;
   ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.textAlign='center';
-  const label=touchdown?'\u2713 TOUCHDOWN':'\u26a0 '+body+' IMPACT';
+  const label=tdSafe?'\u2713 TOUCHDOWN':tdWarn?'\u26a0 SLOW DOWN':'\u26a0 '+body+' IMPACT';
   const bw=ctx.measureText(label).width+16;
   ctx.fillStyle='rgba(10,5,20,0.82)';
   ctx.beginPath(); ctx.roundRect(x-bw/2,lY-22,bw,26,6); ctx.fill();
@@ -1204,9 +1210,15 @@ function renderLanding() {
     if (sc) {
       const sp=Math.max(0,dispPts.length-20);
       const isTD=sc.body==='TOUCHDOWN';
+      const curSpd=Math.hypot(lRocket.vx,lRocket.vy);
+      // TOUCHDOWN zone: on-pad; safe = current speed ok; warn = too fast
+      const tdSafe=isTD&&curSpd<=LAND_SPEED_MAX;
+      const tdWarn=isTD&&curSpd>LAND_SPEED_MAX;
+      const tailCol=tdSafe?'rgba(74,222,128,0.85)':tdWarn?'rgba(251,191,36,0.85)':'rgba(255,80,80,0.75)';
       strokePath(dispPts.slice(0,sp),'rgba(251,211,77,0.45)',1.3,[6,6]);
-      strokePath(dispPts.slice(sp),isTD?'rgba(74,222,128,0.85)':'rgba(255,80,80,0.75)',2.0,[]);
-      drawCollisionWarning(sc);
+      strokePath(dispPts.slice(sp),tailCol,2.0,[]);
+      // Pass speed state into warning renderer
+      drawCollisionWarning(Object.assign({},sc,{tdSafe,tdWarn}));
     } else strokePath(dispPts,'rgba(251,211,77,0.45)',1.3,[6,6]);
   }
 
