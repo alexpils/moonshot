@@ -730,7 +730,15 @@ function predictM3Path() {
       const prevX=px,prevY=py;
       const gM=gravAccel(CX,CY,MOON_MASS,px,py);
       pvx+=gM.ax*subDt; pvy+=gM.ay*subDt; px+=pvx*subDt; py+=pvy*subDt;
-      if (gM.dist<LAND_MOON_R) { const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R); col={x:sp.x,y:sp.y,body:'MOON'}; pts.push(sp); hit=true; break; }
+      if (gM.dist<LAND_MOON_R) {
+        const sp=surfacePoint(prevX,prevY,px,py,CX,CY,LAND_MOON_R);
+        const impactAngle=Math.atan2(sp.y-CY,sp.x-CX);
+        let padDiff=impactAngle-PAD_ANGLE; while(padDiff>Math.PI)padDiff-=2*Math.PI; while(padDiff<-Math.PI)padDiff+=2*Math.PI;
+        const impactSpd=Math.hypot(pvx,pvy);
+        const onPadPred=Math.abs(padDiff)<PAD_HALF && impactSpd<=LAND_SPEED_MAX;
+        col={x:sp.x,y:sp.y,body:onPadPred?'TOUCHDOWN':'MOON'};
+        pts.push(sp); hit=true; break;
+      }
       if (gM.dist>LAND_ESCAPE||gM.dist<2) { hit=true; break; }
     }
     if (hit) break; pts.push({x:px,y:py});
@@ -811,22 +819,33 @@ function earthEclipseFactor(mx,my,sunX,sunY) {
 // ════════════════════════════════════════════════════════════════════════════
 
 function drawCollisionWarning(col) {
-  const {x,y,body}=col, t=(Date.now()/400)%(Math.PI*2), pulse=0.55+0.45*Math.sin(t);
+  const {x,y,body}=col;
+  const touchdown = body==='TOUCHDOWN';
+  const t=(Date.now()/400)%(Math.PI*2), pulse=0.55+0.45*Math.sin(t);
+  const cr = touchdown?'74,222,128':'255,80,80';     // green vs red
+  const cl = touchdown?'134,239,172':'255,120,120';
   ctx.save();
-  ctx.strokeStyle=`rgba(255,80,80,${(0.3+0.3*Math.sin(t)).toFixed(2)})`; ctx.lineWidth=2;
+  ctx.strokeStyle=`rgba(${cr},${(0.3+0.3*Math.sin(t)).toFixed(2)})`; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(x,y,22+6*Math.sin(t),0,Math.PI*2); ctx.stroke();
-  ctx.strokeStyle=`rgba(255,80,80,${pulse.toFixed(2)})`; ctx.lineWidth=2.5;
+  ctx.strokeStyle=`rgba(${cr},${pulse.toFixed(2)})`; ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.arc(x,y,13,0,Math.PI*2); ctx.stroke();
-  ctx.strokeStyle=`rgba(255,120,120,${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
-  const s=7;
-  ctx.beginPath(); ctx.moveTo(x-s,y-s); ctx.lineTo(x+s,y+s); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+s,y-s); ctx.lineTo(x-s,y+s); ctx.stroke();
+  if (touchdown) {
+    // Checkmark instead of X
+    ctx.strokeStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x-6,y); ctx.lineTo(x-1,y+6); ctx.lineTo(x+7,y-6); ctx.stroke();
+  } else {
+    ctx.strokeStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
+    const s=7;
+    ctx.beginPath(); ctx.moveTo(x-s,y-s); ctx.lineTo(x+s,y+s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+s,y-s); ctx.lineTo(x-s,y+s); ctx.stroke();
+  }
   const lY=y<CY?y+34:y-22;
   ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.textAlign='center';
-  const label='\u26a0 '+body+' IMPACT', bw=ctx.measureText(label).width+16;
+  const label=touchdown?'\u2713 TOUCHDOWN':'\u26a0 '+body+' IMPACT';
+  const bw=ctx.measureText(label).width+16;
   ctx.fillStyle='rgba(10,5,20,0.82)';
   ctx.beginPath(); ctx.roundRect(x-bw/2,lY-22,bw,26,6); ctx.fill();
-  ctx.fillStyle=`rgba(255,120,120,${pulse.toFixed(2)})`; ctx.fillText(label,x,lY);
+  ctx.fillStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.fillText(label,x,lY);
   ctx.textAlign='left'; ctx.restore();
 }
 
@@ -1182,8 +1201,13 @@ function renderLanding() {
   if (lState.outcome==='playing') {
     const pred=predictLandingPath(), pts=pred.pts;
     const sc=collisionFilter.update(pred.collision), dispPts=pts.slice(0,pathLengthFilter.update(pts.length));
-    if (sc) { const sp=Math.max(0,dispPts.length-20); strokePath(dispPts.slice(0,sp),'rgba(251,211,77,0.45)',1.3,[6,6]); strokePath(dispPts.slice(sp),'rgba(255,80,80,0.75)',2.0,[]); drawCollisionWarning(sc); }
-    else strokePath(dispPts,'rgba(251,211,77,0.45)',1.3,[6,6]);
+    if (sc) {
+      const sp=Math.max(0,dispPts.length-20);
+      const isTD=sc.body==='TOUCHDOWN';
+      strokePath(dispPts.slice(0,sp),'rgba(251,211,77,0.45)',1.3,[6,6]);
+      strokePath(dispPts.slice(sp),isTD?'rgba(74,222,128,0.85)':'rgba(255,80,80,0.75)',2.0,[]);
+      drawCollisionWarning(sc);
+    } else strokePath(dispPts,'rgba(251,211,77,0.45)',1.3,[6,6]);
   }
 
   strokePath(lState.trail,'rgba(125,211,252,0.4)',1.5,[]);
