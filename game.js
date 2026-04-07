@@ -256,6 +256,7 @@ function handleCanvasClick(e) {
       resetLanding(orbitHandoff);
       setTouchUIVisible(true);
     }
+    if (hit(uiHitBoxes.retryGame) && state.outcome !== 'playing')   resetGame();
     if (hit(uiHitBoxes.backToTitle) && state.outcome !== 'playing') enterTitle();
   }
   if (scene === 'landing') {
@@ -1250,7 +1251,7 @@ function drawCountdownOverlay() {
 }
 
 function drawOrbitOutcomeBanner(){
-  if(state.outcome==='playing'||state.outcome==='win')return;drawOutcomeBanner(state.outcome,state.message,{retryKey:null,hint:'Hold stable orbit for 30 seconds'});
+  if(state.outcome==='playing'||state.outcome==='win')return;drawOutcomeBanner(state.outcome,state.message,{retryKey:'retryGame',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  LUNAR ORBIT ACHIEVED',winLine2:'MISSION COMPLETE',hint:'Hold stable lunar orbit for 60 seconds'});
 }
 
 
@@ -1414,7 +1415,7 @@ function drawM3HUD() {
 
 function drawM3OutcomeBanner(){
   if (transition.active) return;
-  drawOutcomeBanner(m3State.outcome,m3State.message,{retryKey:'retryM3',retryLabel:'\u21ba Retry',winLine1:'\uD83D\uDE80  LUNAR ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — PREPARE FOR RETURN',hint:'Reach the orbit band and hold for 30s'});
+  drawOutcomeBanner(m3State.outcome,m3State.message,{retryKey:'retryM3',retryLabel:'\u21ba Retry',winLine1:'\uD83D\uDE80  LUNAR ORBIT ACHIEVED',winLine2:'MISSION COMPLETE — PREPARE FOR RETURN',hint:'Reach the orbit band and hold for 60s'});
 }
 
 
