@@ -97,6 +97,7 @@ let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbi
 const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null };
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
+let m0OrbitDir = 1; // 1 = CW/east (default, original), -1 = CCW/west (set when M0 exits west)
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
 let m4EntryFuel  = 100;  // fuel at M4 start
 
@@ -343,7 +344,9 @@ function resetGame() {
   const r0 = 75, ang = -Math.PI / 2;
   const x = CX + Math.cos(ang) * r0, y = CY + Math.sin(ang) * r0;
   const circV = Math.sqrt(G * EARTH_MASS / r0);
-  rocket = { x, y, vx: -Math.sin(ang)*circV, vy: Math.cos(ang)*circV, angle: ang+Math.PI/2, fuel: 100 };
+  // m0OrbitDir: 1=CW/east (original default), -1=CCW/west. Set by M0 exit direction.
+  const dir = m0OrbitDir;
+  rocket = { x, y, vx: -Math.sin(ang)*circV*dir, vy: Math.cos(ang)*circV*dir, angle: ang+Math.PI/2, fuel: 100 };
 
   document.getElementById('btn-prograde')?.classList.toggle('pressed', true);
   document.getElementById('btn-retrograde')?.classList.toggle('pressed', false);
@@ -1707,6 +1710,7 @@ function updateM0Physics(realDt) {
         endM0('win','ORBIT ACHIEVED');
         progress.unlockMission0();
         missionLog.m0={time:(performance.now()-m0State.missionStartTime)/1000,fuel:m0Rocket.fuel,maxSpeed:m0State.maxSpeed};
+        m0OrbitDir = m0Rocket.vx < 0 ? -1 : 1; // west launch (vx<0) → CCW (dir=-1), east → CW (dir=1)
         transition.start(function(){scene='orbit';resetGame();});
       }
     } else {
