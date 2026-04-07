@@ -185,9 +185,6 @@ canvas {
 }
 
 /* Hide when already in fullscreen */
-:fullscreen .fullscreen-btn,
-:-webkit-full-screen 
-
 /* ── Prevent long-press interference ── */
 button, canvas, .game-row, .side-ctrl, .bottom-bar {
   -webkit-touch-callout: none;
@@ -222,10 +219,6 @@ button {
   transform: scale(0.93);
 }
 /* ── Button visibility ── */
-/* Fullscreen: desktop only */
-@media (hover: none), (pointer: coarse) {
-  
-}
 /* Menu button: always visible, but .hidden hides it */
 .menu-btn.hidden { display: none; }
 
@@ -254,10 +247,7 @@ button {
 .fullscreen-btn:active,
 .menu-btn:active { background: rgba(59,130,246,0.5); }
 
-/* Fullscreen: desktop only */
-@media (hover: none), (pointer: coarse) {
-  .fullscreen-btn { display: none; }
-}
+/* Fullscreen button visible on all devices; hidden via JS when in fullscreen */
 
 /* When in actual fullscreen mode, hide the button */
 :fullscreen .fullscreen-btn,
