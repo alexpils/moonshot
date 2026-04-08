@@ -74,16 +74,24 @@ Side panels with rotate, thrust, PRO/RETRO buttons. Warp cycle (left panel, belo
 
 ---
 
-## Music
+## Soundtrack
 
-"Rocket" by Kevin MacLeod (incompetech.com)
-Licensed under Creative Commons: By Attribution 4.0 — http://creativecommons.org/licenses/by/4.0/
+Each mission has its own track, all by Kevin MacLeod (incompetech.com), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/):
+
+| Scene | Track |
+|-------|-------|
+| Title / Endgame | Rocket |
+| M00 Launch | At Launch |
+| M01–M03 | Mesmerizing Galaxy |
+| M04 Return | Space Fighter |
+
+Music attribution is shown as an overlay at the start of each scene.
 
 ---
 
 ## Tech
 
-Vanilla JS + HTML5 Canvas. No libraries, no build step. Single game file (`game.js`, ~2300 lines).
+Vanilla JS + HTML5 Canvas. No libraries, no build step. Single game file (`game.js`, ~2400 lines).
 
 ```bash
 # Run locally
