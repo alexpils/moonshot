@@ -164,15 +164,9 @@ window.addEventListener('keydown', e => {
   if (block.includes(e.code)) e.preventDefault();
   keys.add(e.code);
 
-  if (e.code === 'KeyR') {
-    if (scene === 'm0')      { resetM0(); return; }
-    if (scene === 'orbit')   { resetGame(); return; }
-    if (scene === 'landing') { resetLanding(orbitHandoff); return; }
-    if (scene === 'm3')      { resetM3(m3EntryFuel); return; }
-    if (scene === 'm4')      { resetM4(m4EntryFuel); return; }
-  }
+  if (e.code === 'KeyR') { restartActiveScene(); return; }
 
-  const tOrient = scene === 'm0' ? m0State : (scene === 'm4' ? m4State : (scene === 'orbit' ? state : (scene === 'landing' ? lState : (scene === 'm3' ? m3State : null))));
+  const tOrient = getActiveState();
   if (!tOrient) return;
 
   if (e.code === 'KeyE') {
@@ -444,6 +438,23 @@ let state, rocket;
 let lState, lRocket;
 let m3State, m3Rocket;
 let m0State, m0Rocket;
+let m4State, m4Rocket;
+
+// ── Scene registry ───────────────────────────────────────────────────────────
+// Single source of truth mapping the active scene → its state/rocket/restart.
+// Getters read the live module-level bindings (which reset functions reassign),
+// so this stays correct after every reset. Adding a mission = one entry here
+// instead of editing the 5-way ternary that used to live in every input handler.
+const SCENES = {
+  m0:      { get state(){ return m0State; }, get rocket(){ return m0Rocket; }, restart(){ resetM0(); } },
+  orbit:   { get state(){ return state;   }, get rocket(){ return rocket;   }, restart(){ resetGame(); } },
+  landing: { get state(){ return lState;  }, get rocket(){ return lRocket;  }, restart(){ resetLanding(orbitHandoff, landingEntryFuel); } },
+  m3:      { get state(){ return m3State; }, get rocket(){ return m3Rocket; }, restart(){ resetM3(m3EntryFuel); } },
+  m4:      { get state(){ return m4State; }, get rocket(){ return m4Rocket; }, restart(){ resetM4(m4EntryFuel); } },
+};
+function getActiveState()  { return SCENES[scene] ? SCENES[scene].state  : null; }
+function getActiveRocket() { return SCENES[scene] ? SCENES[scene].rocket : null; }
+function restartActiveScene() { if (SCENES[scene]) SCENES[scene].restart(); }
 
 const pathLengthFilter = {
   len: 140,
@@ -1395,7 +1406,7 @@ function drawOrbitHUD(moon) {
   drawStatusBar(state.outcome==='playing'?state.message:'');
   drawFuelBar(fuelPct,rocket.fuel,{markers:[{pct:0.80,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed);
-  drawTelemetryPills(dE,dM,warp);
+  drawTelemetryPills([{label:'EARTH',value:dE.toFixed(0)+' u'},{label:'MOON',value:dM.toFixed(0)+' u'},{label:'WARP',value:warp+'×'}]);
   drawCountdownOverlay();
   drawMusicAttrib();
   drawOrbitOutcomeBanner();
@@ -1472,33 +1483,53 @@ function drawFuelBar(pct,fuelVal,opts) {
   ctx.textAlign='left'; ctx.restore();
 }
 
+// The gauge's static layer (background arcs, tick marks, end labels) only depends
+// on MAX_SPD, so it is rendered once per scale into an offscreen canvas and blitted
+// each frame instead of re-stroking ~100 ticks every frame.
+const SPEED_GAUGE_PAD = 30;
+const _gaugeCache = new Map();
+function gaugeStaticLayer(MAX_SPD, gr) {
+  let cached = _gaugeCache.get(MAX_SPD);
+  if (cached) return cached;
+  const size = (gr + SPEED_GAUGE_PAD) * 2;
+  const c = document.createElement('canvas'); c.width = size; c.height = size;
+  const g = c.getContext('2d');
+  const gx = gr + SPEED_GAUGE_PAD, gy = gr + SPEED_GAUGE_PAD;
+  const startA = Math.PI*0.75, endA = Math.PI*2.25;
+  g.beginPath(); g.arc(gx,gy,gr+2,startA,endA); g.strokeStyle='rgba(100,140,255,0.08)'; g.lineWidth=18; g.stroke();
+  g.beginPath(); g.arc(gx,gy,gr,startA,endA); g.strokeStyle='rgba(255,255,255,0.07)'; g.lineWidth=12; g.lineCap='butt'; g.stroke();
+  const tickStep=MAX_SPD<=100?10:100, majorEvery=MAX_SPD<=100?50:500;
+  for (let v=0;v<=MAX_SPD;v+=tickStep) {
+    const a=startA+(endA-startA)*(v/MAX_SPD), inner=v%majorEvery===0?gr-18:gr-12;
+    g.beginPath(); g.moveTo(gx+Math.cos(a)*inner,gy+Math.sin(a)*inner); g.lineTo(gx+Math.cos(a)*(gr+2),gy+Math.sin(a)*(gr+2));
+    g.strokeStyle=v%majorEvery===0?'rgba(180,200,255,0.5)':'rgba(180,200,255,0.2)'; g.lineWidth=v%majorEvery===0?2:1; g.stroke();
+  }
+  g.textAlign='center';
+  g.font='600 11px Inter,ui-sans-serif,sans-serif'; g.fillStyle='rgba(180,200,255,0.3)';
+  g.fillText(String(MAX_SPD),gx+Math.cos(endA)*(gr+16),gy+Math.sin(endA)*(gr+16)+4);
+  g.fillText('0',gx+Math.cos(startA)*(gr+16),gy+Math.sin(startA)*(gr+16)+4);
+  cached = { canvas: c };
+  _gaugeCache.set(MAX_SPD, cached);
+  return cached;
+}
+
 function drawSpeedGauge(speed, MAX_SPD=1000) {
   const gx=120,gy=H-118,gr=82;
   const startA=Math.PI*0.75,endA=Math.PI*2.25,pct=Math.min(speed/MAX_SPD,1);
   const fillEnd=startA+(endA-startA)*pct;
   const sc=speed<MAX_SPD*0.4?'#38bdf8':speed<MAX_SPD*0.7?'#fbbf24':'#f87171';
   ctx.save();
-  ctx.beginPath(); ctx.arc(gx,gy,gr+2,startA,endA); ctx.strokeStyle='rgba(100,140,255,0.08)'; ctx.lineWidth=18; ctx.stroke();
-  ctx.beginPath(); ctx.arc(gx,gy,gr,startA,endA); ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=12; ctx.lineCap='butt'; ctx.stroke();
-  const tickStep=MAX_SPD<=100?10:100, majorEvery=MAX_SPD<=100?50:500;
-  for (let v=0;v<=MAX_SPD;v+=tickStep) {
-    const a=startA+(endA-startA)*(v/MAX_SPD), inner=v%majorEvery===0?gr-18:gr-12;
-    ctx.beginPath(); ctx.moveTo(gx+Math.cos(a)*inner,gy+Math.sin(a)*inner); ctx.lineTo(gx+Math.cos(a)*(gr+2),gy+Math.sin(a)*(gr+2));
-    ctx.strokeStyle=v%majorEvery===0?'rgba(180,200,255,0.5)':'rgba(180,200,255,0.2)'; ctx.lineWidth=v%majorEvery===0?2:1; ctx.stroke();
-  }
+  ctx.drawImage(gaugeStaticLayer(MAX_SPD,gr).canvas, gx-(gr+SPEED_GAUGE_PAD), gy-(gr+SPEED_GAUGE_PAD));
   if (pct>0) { ctx.beginPath(); ctx.arc(gx,gy,gr,startA,fillEnd); ctx.strokeStyle=sc; ctx.lineWidth=12; ctx.lineCap='round'; ctx.stroke(); }
   ctx.beginPath(); ctx.arc(gx+Math.cos(fillEnd)*gr,gy+Math.sin(fillEnd)*gr,7,0,Math.PI*2); ctx.fillStyle=sc; ctx.fill();
   ctx.textAlign='center';
   ctx.font='800 28px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=sc; ctx.fillText(speed.toFixed(0),gx,gy+10);
   ctx.font='600 12px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='#4a6080'; ctx.fillText('u/s',gx,gy+28);
-  ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(180,200,255,0.3)';
-  ctx.fillText(MAX_SPD,gx+Math.cos(endA)*(gr+16),gy+Math.sin(endA)*(gr+16)+4);
-  ctx.fillText('0',gx+Math.cos(startA)*(gr+16),gy+Math.sin(startA)*(gr+16)+4);
   ctx.textAlign='left'; ctx.restore();
 }
 
-function drawTelemetryPills(dE,dM,warp) {
-  const items=[{label:'EARTH',value:dE.toFixed(0)+' u'},{label:'MOON',value:dM.toFixed(0)+' u'},{label:'WARP',value:warp+'\u00d7'}];
+// Bottom-row telemetry pills. items: [{label, value, color?}]
+function drawTelemetryPills(items) {
   const pw=130,ph=44,gap=10,sx=230,sy=H-80;
   ctx.save();
   items.forEach((item,i) => {
@@ -1506,25 +1537,27 @@ function drawTelemetryPills(dE,dM,warp) {
     ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1;
     rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
     ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
-    ctx.fillStyle='#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
+    ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
   });
   ctx.restore();
 }
 
-function drawCountdownOverlay() {
-  if (state.outcome!=='playing'||state.stableTimer<=0) return;
-  const rem=Math.max(0,STABLE_HOLD-state.stableTimer), prog=state.stableTimer/STABLE_HOLD;
+// Mission-complete "hold orbit" countdown ring (bottom-right). rgb = "r,g,b" string.
+function drawHoldRing(timer, holdMax, rgb) {
+  const rem=Math.max(0,holdMax-timer), prog=timer/holdMax;
   const cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2,false);
-  ctx.strokeStyle='rgba(134,239,172,0.12)'; ctx.lineWidth=14; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog,false);
-  ctx.strokeStyle=`rgba(134,239,172,${(0.7*pulse).toFixed(2)})`; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2); ctx.strokeStyle=`rgba(${rgb},0.12)`; ctx.lineWidth=14; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog); ctx.strokeStyle=`rgba(${rgb},${(0.7*pulse).toFixed(2)})`; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
   ctx.textAlign='center';
-  ctx.font='800 72px Inter,ui-sans-serif,sans-serif';
-  ctx.fillStyle=`rgba(134,239,172,${pulse.toFixed(2)})`; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
-  ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.6)'; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
+  ctx.font='800 72px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=`rgba(${rgb},${pulse.toFixed(2)})`; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
+  ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=`rgba(${rgb},0.6)`; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
   ctx.textAlign='left'; ctx.restore();
+}
+
+function drawCountdownOverlay() {
+  if (state.outcome!=='playing'||state.stableTimer<=0) return;
+  drawHoldRing(state.stableTimer, STABLE_HOLD, '134,239,172');
 }
 
 function drawOrbitOutcomeBanner(){
@@ -1560,21 +1593,11 @@ function drawLandingHUD() {
   // Landing-specific telemetry pills (speed pill removed — gauge covers it)
   { const altColor=alt<80?'#f87171':alt<200?'#fbbf24':'#38bdf8';
     const vsColor=descentRate>80?'#f87171':descentRate>20?'#fbbf24':'#4ade80';
-    const items=[
+    drawTelemetryPills([
       {label:'ALT',value:alt.toFixed(0)+' u',color:altColor},
       {label:'V-SPEED',value:(descentRate>=0?'\u25bc ':' \u25b2 ')+Math.abs(descentRate).toFixed(0),color:vsColor},
       {label:'WARP',value:warp+'\u00d7',color:'#ccddf8'},
-    ];
-    const pw=130,ph=44,gap=10,sx=230,sy=H-80;
-    ctx.save();
-    items.forEach((item,i) => {
-      const x=sx+i*(pw+gap),y=sy;
-      ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1;
-      rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
-      ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
-    });
-    ctx.restore(); }
+    ]); }
 
   drawMusicAttrib();
   drawLandingOutcomeBanner();
@@ -1664,29 +1687,12 @@ function drawM3HUD() {
   drawSpeedGauge(speed,400);
 
   // Hold countdown ring
-  if (m3State.outcome==='playing'&&m3State.stableTimer>0) {
-    const rem=Math.max(0,M3_HOLD-m3State.stableTimer), prog=m3State.stableTimer/M3_HOLD;
-    const cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2); ctx.strokeStyle='rgba(134,239,172,0.12)'; ctx.lineWidth=14; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog); ctx.strokeStyle=`rgba(134,239,172,${(0.7*pulse).toFixed(2)})`; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
-    ctx.textAlign='center';
-    ctx.font='800 72px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle=`rgba(134,239,172,${pulse.toFixed(2)})`; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
-    ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.6)'; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
-    ctx.textAlign='left'; ctx.restore();
-  }
+  if (m3State.outcome==='playing'&&m3State.stableTimer>0) drawHoldRing(m3State.stableTimer, M3_HOLD, '134,239,172');
 
   // Pills
   { const altC=alt<80?'#f87171':alt<200?'#fbbf24':'#38bdf8';
     const distC=inBand?'#4ade80':(dist<M3_ORBIT_MIN?'#f87171':'#fbbf24');
-    const items=[{label:'ALT',value:alt.toFixed(0)+' u',color:altC},{label:'ORBIT R',value:dist.toFixed(0)+' u',color:distC},{label:'WARP',value:warp+'\u00d7',color:'#ccddf8'}];
-    const pw=130,ph=44,gap=10,sx=230,sy=H-80;
-    ctx.save();
-    items.forEach((item,i)=>{ const x=sx+i*(pw+gap),y=sy;
-      ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1; rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
-      ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
-    }); ctx.restore(); }
+    drawTelemetryPills([{label:'ALT',value:alt.toFixed(0)+' u',color:altC},{label:'ORBIT R',value:dist.toFixed(0)+' u',color:distC},{label:'WARP',value:warp+'\u00d7',color:'#ccddf8'}]); }
 
   drawMusicAttrib();
   drawM3OutcomeBanner();
@@ -1703,7 +1709,6 @@ function drawM3OutcomeBanner(){
 // M4 — RETURN TO EARTH
 // ════════════════════════════════════════════════════════════════════════════
 
-let m4State, m4Rocket;
 const M4_STABLE_R   = 130;
 const M4_STABLE_MIN = 60;
 
@@ -1855,18 +1860,8 @@ function drawM4HUD(moon) {
   if (m4State.outcome==='playing') drawStatusBar(m4State.message);
   drawFuelBar(fuelPct,m4Rocket.fuel);
   drawSpeedGauge(speed);
-  if (m4State.outcome==='playing'&&m4State.stableTimer>0) {
-    var rem=Math.max(0,M4_HOLD-m4State.stableTimer),prog=m4State.stableTimer/M4_HOLD;
-    var cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
-    ctx.save();
-    ctx.beginPath();ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2);ctx.strokeStyle='rgba(96,165,250,0.12)';ctx.lineWidth=14;ctx.stroke();
-    ctx.beginPath();ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog);ctx.strokeStyle='rgba(96,165,250,'+(0.7*pulse).toFixed(2)+')';ctx.lineWidth=14;ctx.lineCap='round';ctx.stroke();
-    ctx.textAlign='center';
-    ctx.font='800 72px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(96,165,250,'+pulse.toFixed(2)+')';ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
-    ctx.font='700 18px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(96,165,250,0.6)';ctx.fillText('HOLD ORBIT',cx2,cy2+60);
-    ctx.textAlign='left';ctx.restore();
-  }
-  drawTelemetryPills(dE,dM,warp);
+  if (m4State.outcome==='playing'&&m4State.stableTimer>0) drawHoldRing(m4State.stableTimer, M4_HOLD, '96,165,250');
+  drawTelemetryPills([{label:'EARTH',value:dE.toFixed(0)+' u'},{label:'MOON',value:dM.toFixed(0)+' u'},{label:'WARP',value:warp+'\u00d7'}]);
   drawMusicAttrib();
   drawM4OutcomeBanner();
 }
@@ -2185,39 +2180,19 @@ function drawM0HUD() {
   drawSpeedGauge(speed,800);
 
   // Hold countdown
-  if (m0State.outcome==='playing'&&m0State.stableTimer>0) {
-    var rem=Math.max(0,M0_HOLD-m0State.stableTimer),prog=m0State.stableTimer/M0_HOLD;
-    var cx2=W-130,cy2=H-130,radius=90,pulse=0.85+0.15*Math.sin(Date.now()/300);
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2); ctx.strokeStyle='rgba(134,239,172,0.12)'; ctx.lineWidth=14; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx2,cy2,radius,-Math.PI/2,-Math.PI/2+Math.PI*2*prog); ctx.strokeStyle='rgba(134,239,172,'+(0.7*pulse).toFixed(2)+')'; ctx.lineWidth=14; ctx.lineCap='round'; ctx.stroke();
-    ctx.textAlign='center';
-    ctx.font='800 72px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,'+pulse.toFixed(2)+')'; ctx.fillText(rem>0?Math.ceil(rem):'\u2713',cx2,cy2+24);
-    ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle='rgba(134,239,172,0.6)'; ctx.fillText('HOLD ORBIT',cx2,cy2+60);
-    ctx.textAlign='left'; ctx.restore();
-  }
+  if (m0State.outcome==='playing'&&m0State.stableTimer>0) drawHoldRing(m0State.stableTimer, M0_HOLD, '134,239,172');
 
   // Pills
   var inBand=alt>=M0_TARGET_MIN&&alt<=M0_TARGET_MAX;
   var altC=inBand?'#4ade80':(alt<M0_TARGET_MIN?'#f87171':'#fbbf24');
   var hPct=Math.round(hFrac*100), hC=hFrac>=M0_HORIZ_MIN?'#4ade80':(hFrac>0.5?'#fbbf24':'#f87171');
   var stageC=m0State.stage===1?'#fbbf24':'#94a3b8';
-  var items=[
+  drawTelemetryPills([
     {label:'ALT',value:alt.toFixed(0)+' u',color:altC},
     {label:'HORIZ',value:hPct+'%',color:hC},
     {label:'STAGE',value:m0State.stage===1?'1':'2 (SEP)',color:stageC},
     {label:'WARP',value:warp+'\u00d7',color:'#ccddf8'},
-  ];
-  var pw=130,ph=44,gap=10,sx=230,sy=H-80;
-  ctx.save();
-  items.forEach(function(item,i){
-    var x=sx+i*(pw+gap),y=sy;
-    ctx.fillStyle='rgba(6,10,24,0.82)'; ctx.strokeStyle='rgba(100,140,255,0.15)'; ctx.lineWidth=1;
-    rrect(x,y,pw,ph,8); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#4a6080'; ctx.font='600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.label,x+10,y+14);
-    ctx.fillStyle=item.color||'#ccddf8'; ctx.font='700 16px Inter,ui-sans-serif,sans-serif'; ctx.fillText(item.value,x+10,y+33);
-  });
-  ctx.restore();
+  ]);
 
   drawMusicAttrib();
   drawM0OutcomeBanner();
@@ -2308,7 +2283,7 @@ function loop(now) {
 
 (function initOrientButtons() {
   function setMode(mode) {
-    const tgt=scene==='m0'?m0State:(scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state)));
+    const tgt=getActiveState();
     if (!tgt) return;
     tgt.orientMode=tgt.orientMode===mode?null:mode;
     document.getElementById('btn-prograde')?.classList.toggle('pressed',tgt.orientMode==='prograde');
@@ -2329,7 +2304,7 @@ function loop(now) {
     el.addEventListener('pointerdown',e=>{
       e.preventDefault();
       if (id==='btn-left'||id==='btn-right') {
-        const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
+        const tgt=getActiveState();
         if (tgt) { tgt.orientMode=null; document.getElementById('btn-prograde')?.classList.remove('pressed'); document.getElementById('btn-retrograde')?.classList.remove('pressed'); }
       }
       setP(true);
@@ -2342,7 +2317,7 @@ function loop(now) {
   document.querySelectorAll('.warp-btn').forEach((btn,i)=>{
     btn.addEventListener('pointerdown',e=>{
       e.preventDefault();
-      const tgt=scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:state));
+      const tgt=getActiveState();
       if (tgt) tgt.warpIdx=i;
       document.querySelectorAll('.warp-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
     },{passive:false});
@@ -2358,7 +2333,7 @@ function loop(now) {
   if (warpCycleBtn) {
     warpCycleBtn.addEventListener('pointerdown', e => {
       e.preventDefault();
-      const tgt = scene==='m4'?m4State:(scene==='m3'?m3State:(scene==='landing'?lState:(scene==='m0'?m0State:state)));
+      const tgt = getActiveState();
       if (!tgt) return;
       tgt.warpIdx = (tgt.warpIdx + 1) % WARP_LEVELS.length;
       warpCycleBtn.textContent = WARP_LEVELS[tgt.warpIdx] + '×';
@@ -2376,7 +2351,7 @@ function loop(now) {
   });
 
   const rb=document.getElementById('btn-restart');
-  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); if(scene==='m0')resetM0(); else if(scene==='orbit')resetGame(); else if(scene==='landing')resetLanding(orbitHandoff,landingEntryFuel); else if(scene==='m3')resetM3(m3EntryFuel); else if(scene==='m4')resetM4(m4EntryFuel);},{passive:false});
+  if (rb) rb.addEventListener('pointerdown',e=>{e.preventDefault(); restartActiveScene();},{passive:false});
 
   document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
   document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});

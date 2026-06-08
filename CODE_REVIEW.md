@@ -113,9 +113,19 @@ _2026-04-07 — applied by Mister Krabs 🦀_
 | 7 | Dead code: fix identity ternary in `resetLanding` | `resetLanding()` | Both branches produced the same string — simplified to a direct assignment. |
 | 8 | Dead code: extract `LAND_FUEL_RATIO` constant | Constants block + landing physics | `FUEL_DRAIN*(LAND_THRUST/THRUST)` inlined in physics loop — extracted to named constant. |
 
+_2026-06-08 — refactor pass_
+
+| # | Fix | Location | Notes |
+|---|-----|----------|-------|
+| 9  | `getActiveState()` / `getActiveRocket()` + `SCENES` registry | new block after STATE | Replaced the 5-way `scene === ... ? ... : ...` ternary in the keydown handler, restart (`R` + side button), orient buttons, touch rotate, warp buttons, and warp-cycle button. Adding a mission is now one registry entry. |
+| 10 | Latent input bugs fixed by the registry | touch rotate / warp / `R` | Touch rotate + warp buttons previously never targeted M0 (ternary omitted it); `R` in single-mode landing reset to 100% fuel instead of the 80% entry budget. The single restart path fixes both. |
+| 11 | `drawHoldRing()` extracted | HUD helpers | The hold-orbit countdown ring was copy-pasted 4× (orbit/M0/M3/M4) with only colour + hold-time differing. One helper, `rgb` + `holdMax` params. |
+| 12 | `drawTelemetryPills(items)` unified | HUD helpers | Bottom-row pills were inlined 4× (landing/M3/M0) plus the orbit/M4 version. Now one renderer takes `[{label,value,color?}]`. |
+| 13 | Speed gauge static layer cached | `gaugeStaticLayer()` / `drawSpeedGauge()` | Background arcs + tick marks + end labels (~10–100 strokes/frame) now render once per `MAX_SPD` into an offscreen canvas and are blitted each frame. Only the fill arc, needle, and number redraw. |
+
 **Still open (next session):**
-- Cache gradients + speed gauge ticks to offscreen canvases (performance)
-- `getActiveState()` / `getActiveRocket()` helpers (maintainability)
+- Cache Earth/Moon/atmosphere gradients to offscreen canvases (remaining performance item)
+- `var` → `const`/`let` sweep in M0/M4 code (cosmetic consistency)
 - Web Audio sound effects
 - Fuel star rating on win screen
 - Mission timer + localStorage best times
