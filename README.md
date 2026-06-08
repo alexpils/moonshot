@@ -91,7 +91,7 @@ Music attribution is shown as an overlay at the start of each scene.
 
 ## Tech
 
-Vanilla JS + HTML5 Canvas. No libraries, no build step. Single game file (`game.js`, ~2400 lines).
+Vanilla JS + HTML5 Canvas. No libraries, no build step. Single game file (`game.js`, ~2400 lines). A scene registry (`SCENES` + `getActiveState`/`getActiveRocket`) drives all per-mission input, and shared HUD helpers (`drawHoldRing`, `drawTelemetryPills`, cached speed gauge) keep the five missions from duplicating render code.
 
 ```bash
 # Run locally
