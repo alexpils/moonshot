@@ -51,6 +51,39 @@ const M3_HOLD       = 60;
 const M4_HOLD       = 30;
 const M3_THRUST     = 110;
 
+// Mission 5 — Reentry. Side-on, flat-Earth model: physics y = -altitude (canvas-style,
+// down is +), gravity is relieved by horizontal speed (vx²/V_orb²) so a circular orbit
+// exists. Tuned with a headless sim so the corridor is real: lift down always burns up,
+// neutral survives small/medium deorbit burns, lift up survives steep burns but skips
+// out of the atmosphere on shallow ones.
+const M5_ORBIT_V     = 1350;   // circular orbit speed (horizontal)
+const M5_G           = 33.75;  // surface gravity
+const M5_SCALE_H     = 90;     // atmosphere scale height
+const M5_ATMO_TOP    = 450;    // entry interface (5 scale heights); density is 0 above
+const M5_RHO_TOP     = Math.exp(-M5_ATMO_TOP / M5_SCALE_H);
+const M5_START_ALT   = 1450;   // parking orbit altitude
+const M5_K_CAPSULE   = M5_G / (60 * 60); // drag coefficient → 60 u/s terminal at sea level
+const M5_K_DROGUE    = M5_K_CAPSULE * 4;   // 30 u/s at sea level: slows you, but the main is still required
+const M5_K_MAIN      = M5_K_CAPSULE * 20;
+const M5_CHUTE_OPEN  = 1.0;    // seconds for a canopy to inflate fully
+const M5_LD          = 0.4;    // capsule lift-to-drag at full tilt
+const M5_SHIELD_HALF = 20 * Math.PI / 180; // shield protects within ±20° of the airflow
+const M5_HEAT_IN     = 3467;   // hull heat gain per unit heat flux
+const M5_HEAT_OUT    = 0.9;    // hull cooling rate (1/s)
+const M5_HEAT_BARE   = 4;      // heat multiplier when the shield isn't facing the airflow (or is gone)
+const M5_ABLATE      = 533;    // shield % lost per unit heat flux
+const M5_THRUST      = 67.5;   // service module engine
+const M5_FUEL_DRAIN  = 6;      // fuel %/s while burning
+const M5_DROGUE_MAX  = 300;    // drogue tears above this speed
+const M5_MAIN_MAX    = 90;     // main chute tears above this speed
+const M5_SPLASH_MAX  = 21;     // safe splashdown speed
+const M5_TILT_MAX    = 60 * Math.PI / 180;
+const M5_TILT_RATE   = 0.6;    // rad/s
+const M5_CHUTE_LOCK  = 1.0;    // seconds after separation before Space can open a chute
+const M5_SHIP_X      = 55000;  // recovery ship downrange position: reachable from any sane plan by timing the burn
+const M5_GROUND_SY   = 1360;   // screen y of sea level (fixed vertical camera, clear of the bottom HUD)
+const M5_VIEW_Z      = 0.85;   // uniform world→screen scale (keeps angles true; whole flight fits vertically)
+
 const canvas = document.getElementById('game');
 const ctx    = canvas.getContext('2d');
 const W  = canvas.width;
@@ -94,7 +127,7 @@ const LAND_CRATERS = [
 
 let scene = 'title';
 let titleMouse = { x: 0, y: 0 }; // for title parallax // 'title' | 'm0' | 'orbit' | 'landing' | 'm3' | 'm4' | 'endgame'
-const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null };
+const missionLog = { m0:null, m1:null, m2:null, m3:null, m4:null, m5:null };
 let missionMode = 'full'; // 'full' | 'single'
 const uiHitBoxes = {};
 let orbitHandoff = null; // { relAngle, fuel }
@@ -102,6 +135,7 @@ let m0OrbitDir = 1; // 1 = CW/east (default, original), -1 = CCW/west (set when 
 let m3EntryFuel  = 100;  // fuel at M3 start — preserved on retry
 let landingEntryFuel = 100; // fuel at M2 start in single mode
 let m4EntryFuel  = 100;  // fuel at M4 start
+let m5EntryFuel  = 100;  // fuel at M5 start
 
 // Fade transition state
 const transition = {
@@ -147,10 +181,12 @@ const progress = {
   get mission1Beaten() { return localStorage.getItem('moonshot_m1') === '1'; },
   get mission2Beaten() { return localStorage.getItem('moonshot_m2') === '1'; },
   get mission3Beaten() { return localStorage.getItem('moonshot_m3') === '1'; },
+  get mission4Beaten() { return localStorage.getItem('moonshot_m4') === '1'; },
   unlockMission0()     { localStorage.setItem('moonshot_m0', '1'); },
   unlockMission1()     { localStorage.setItem('moonshot_m1', '1'); },
   unlockMission2()     { localStorage.setItem('moonshot_m2', '1'); },
   unlockMission3()     { localStorage.setItem('moonshot_m3', '1'); },
+  unlockMission4()     { localStorage.setItem('moonshot_m4', '1'); },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -165,6 +201,9 @@ window.addEventListener('keydown', e => {
   keys.add(e.code);
 
   if (e.code === 'KeyR') { restartActiveScene(); return; }
+  // M5: thrust keys double as the parachute key once the service module is gone.
+  // Only a fresh press counts (auto-repeat from a held key is ignored).
+  if (scene === 'm5' && !e.repeat && (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp')) m5RequestChute();
 
   const tOrient = getActiveState();
   if (!tOrient) return;
@@ -209,6 +248,7 @@ const MISSION_TRACKS = {
   landing: 'audio/MesmerizingGalaxyLoop.mp3',
   m3:      'audio/MesmerizingGalaxyLoop.mp3',
   m4:      'audio/SpaceFighterLoop.mp3',
+  m5:      'audio/AtLaunch.mp3',
   endgame: 'audio/Rocket.mp3',
 };
 
@@ -348,6 +388,7 @@ function drawMusicAttrib(alphaOverride) {
 function enterTitle() {
   scene = 'title';
   orbitHandoff = null; // clear handoff so direct M2 start is always fresh
+  setThrustButtonMode('thrust');
   setTouchUIVisible(false);
   musicPlayScene('title'); musicAttribShow();
 }
@@ -372,6 +413,7 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.mission2) && missionMode !== 'full' && progress.mission1Beaten) { scene = 'landing'; orbitHandoff = null; landingEntryFuel = 80; resetLanding(null,80); setTouchUIVisible(true); musicPlayScene('landing'); musicAttribShow(); }
     if (hit(uiHitBoxes.mission3) && missionMode !== 'full' && progress.mission2Beaten) { scene = 'm3'; m3EntryFuel = 60; resetM3(60); setTouchUIVisible(true); musicPlayScene('m3'); musicAttribShow(); }
     if (hit(uiHitBoxes.mission4) && missionMode !== 'full' && progress.mission3Beaten) { scene = 'm4'; m4EntryFuel = 40; resetM4(40); setTouchUIVisible(true); musicPlayScene('m4'); musicAttribShow(); }
+    if (hit(uiHitBoxes.mission5) && missionMode !== 'full' && progress.mission4Beaten) { scene = 'm5'; m5EntryFuel = 20; resetM5(20); setTouchUIVisible(true); musicPlayScene('m5'); musicAttribShow(); }
   }
   if (scene === 'orbit') {
     if (hit(uiHitBoxes.beginDescent) && state.outcome === 'win') {
@@ -423,6 +465,10 @@ function handleCanvasClick(e) {
     if (hit(uiHitBoxes.retryM4))    resetM4(m4EntryFuel);
     if (hit(uiHitBoxes.backToTitle)) enterTitle();
   }
+  if (scene === 'm5') {
+    if (hit(uiHitBoxes.retryM5))    resetM5(m5EntryFuel);
+    if (hit(uiHitBoxes.backToTitle)) enterTitle();
+  }
   if (scene === 'endgame') {
     if (hit(uiHitBoxes.playAgain))   { scene='m0'; resetM0(); setTouchUIVisible(true); musicPlayScene('m0'); musicAttribShow(); }
     if (hit(uiHitBoxes.backToTitle)) enterTitle();
@@ -439,6 +485,7 @@ let lState, lRocket;
 let m3State, m3Rocket;
 let m0State, m0Rocket;
 let m4State, m4Rocket;
+let m5State, m5Rocket;
 
 // ── Scene registry ───────────────────────────────────────────────────────────
 // Single source of truth mapping the active scene → its state/rocket/restart.
@@ -451,6 +498,7 @@ const SCENES = {
   landing: { get state(){ return lState;  }, get rocket(){ return lRocket;  }, restart(){ resetLanding(orbitHandoff, landingEntryFuel); } },
   m3:      { get state(){ return m3State; }, get rocket(){ return m3Rocket; }, restart(){ resetM3(m3EntryFuel); } },
   m4:      { get state(){ return m4State; }, get rocket(){ return m4Rocket; }, restart(){ resetM4(m4EntryFuel); } },
+  m5:      { get state(){ return m5State; }, get rocket(){ return m5Rocket; }, restart(){ resetM5(m5EntryFuel); } },
 };
 function getActiveState()  { return SCENES[scene] ? SCENES[scene].state  : null; }
 function getActiveRocket() { return SCENES[scene] ? SCENES[scene].rocket : null; }
@@ -978,11 +1026,15 @@ function earthEclipseFactor(mx,my,sunX,sunY) {
 // COLLISION WARNING
 // ════════════════════════════════════════════════════════════════════════════
 
+// col: {x, y, body, tdSafe?, tdWarn?} — optional overrides used by M5:
+//   tone: 'safe'|'warn'|'danger', icon: 'check'|'arrow'|'x', label: string
 function drawCollisionWarning(col) {
-  const {x,y,body,tdSafe,tdWarn}=col;
-  const touchdown = body==='TOUCHDOWN';
+  const {x,y,body}=col;
+  const tone = col.tone || (col.tdSafe?'safe':col.tdWarn?'warn':'danger');
+  const icon = col.icon || (body==='TOUCHDOWN' ? (col.tdSafe?'check':'arrow') : 'x');
+  const tdSafe = tone==='safe', tdWarn = tone==='warn';
   const t=(Date.now()/400)%(Math.PI*2), pulse=0.55+0.45*Math.sin(t);
-  // Color: green=safe TD, amber=on-pad but too fast, red=off-pad
+  // Color: green=safe, amber=warning, red=danger
   const cr = tdSafe?'74,222,128':tdWarn?'251,191,36':'255,80,80';
   const cl = tdSafe?'134,239,172':tdWarn?'253,211,77':'255,120,120';
   ctx.save();
@@ -990,9 +1042,9 @@ function drawCollisionWarning(col) {
   ctx.beginPath(); ctx.arc(x,y,22+6*Math.sin(t),0,Math.PI*2); ctx.stroke();
   ctx.strokeStyle=`rgba(${cr},${pulse.toFixed(2)})`; ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.arc(x,y,13,0,Math.PI*2); ctx.stroke();
-  if (touchdown) {
+  if (icon!=='x') {
     ctx.strokeStyle=`rgba(${cl},${pulse.toFixed(2)})`; ctx.lineWidth=2.5; ctx.lineCap='round';
-    if (tdSafe) {
+    if (icon==='check') {
       // Checkmark
       ctx.beginPath(); ctx.moveTo(x-6,y); ctx.lineTo(x-1,y+6); ctx.lineTo(x+7,y-6); ctx.stroke();
     } else {
@@ -1008,7 +1060,7 @@ function drawCollisionWarning(col) {
   }
   const lY=y<CY?y+34:y-22;
   ctx.font='700 18px Inter,ui-sans-serif,sans-serif'; ctx.textAlign='center';
-  const label=tdSafe?'\u2713 TOUCHDOWN':tdWarn?'\u26a0 SLOW DOWN':'\u26a0 '+body+' IMPACT';
+  const label=col.label || (tdSafe?'\u2713 TOUCHDOWN':tdWarn?'\u26a0 SLOW DOWN':'\u26a0 '+body+' IMPACT');
   const bw=ctx.measureText(label).width+16;
   ctx.fillStyle='rgba(10,5,20,0.82)';
   ctx.beginPath(); ctx.roundRect(x-bw/2,lY-22,bw,26,6); ctx.fill();
@@ -1094,13 +1146,14 @@ function renderEndgame(){
   hg.addColorStop(0,'#86efac');hg.addColorStop(0.5,'#d9f99d');hg.addColorStop(1,'#86efac');
   ctx.fillStyle=hg;ctx.fillText('\uD83C\uDF0D  MISSION ACCOMPLISHED',CX,92);
   ctx.font='400 22px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(148,220,160,0.65)';
-  ctx.fillText('All five missions complete \u2014 you flew to the Moon and back.',CX,132);
+  ctx.fillText('All six missions complete \u2014 you flew to the Moon and back.',CX,132);
   var missions=[
     {key:'m0',label:'M00',name:'Launch',icon:'\uD83D\uDE80'},
     {key:'m1',label:'M01',name:'Lunar Orbit',icon:'\uD83C\uDF0D'},
     {key:'m2',label:'M02',name:'Lunar Landing',icon:'\uD83C\uDF15'},
     {key:'m3',label:'M03',name:'Lunar Ascent',icon:'\uD83D\uDE80'},
     {key:'m4',label:'M04',name:'Return Home',icon:'\uD83C\uDF0D'},
+    {key:'m5',label:'M05 \u00B7 shield left',name:'Reentry',icon:'\uD83E\uDE82'},
   ];
   var colW=198,tableW=colW*5,tableX=CX-tableW/2,headerY=200,rowH=90,firstRowY=252;
   ctx.font='700 15px Inter,ui-sans-serif,sans-serif';ctx.fillStyle='rgba(148,175,220,0.5)';ctx.textAlign='left';
@@ -1125,7 +1178,9 @@ function renderEndgame(){
     ctx.fillStyle='#e2e8f8';
     ctx.fillText(Math.round(log.maxSpeed)+' u/s',tableX+colW*3+14,y);
     ctx.font='22px sans-serif';
-    ctx.fillText('\u2B50'.repeat(fp>=60?3:fp>=30?2:1),tableX+colW*4+14,y+2);
+    // Most missions rate on fuel left; M05 logs its own rating (distance to the recovery ship)
+    var stars=log.stars!=null?log.stars:(fp>=60?3:fp>=30?2:1);
+    ctx.fillText('\u2B50'.repeat(stars),tableX+colW*4+14,y+2);
   });
   var divY=firstRowY+missions.length*rowH-2;
   ctx.strokeStyle='rgba(100,140,255,0.18)';ctx.lineWidth=1;
@@ -1226,7 +1281,10 @@ function renderTitle() {
     (!fullLock&&progress.mission3Beaten)?'\uD83C\uDF0D':'\uD83D\uDD12','04','RETURN HOME',
     fullLock?'Start from Launch in full mode':(progress.mission3Beaten?'Navigate back to Earth':'Complete Lunar Ascent first'),
     fullLock||!progress.mission3Beaten);
-  drawCard('mission5',col2,row2Y,cW,cH,'\uD83D\uDD12','05','REENTRY',           'Coming soon…', true);
+  drawCard('mission5',col2,row2Y,cW,cH,
+    (!fullLock&&progress.mission4Beaten)?'\uD83E\uDE82':'\uD83D\uDD12','05','REENTRY',
+    fullLock?'Start from Launch in full mode':(progress.mission4Beaten?'Survive reentry and splash down':'Complete Return Home first'),
+    fullLock||!progress.mission4Beaten);
 
   ctx.textAlign='center';
   ctx.font='400 24px Inter,ui-sans-serif,sans-serif';
@@ -1477,7 +1535,7 @@ function drawFuelBar(pct,fuelVal,opts) {
   ctx.font='700 13px Inter,ui-sans-serif,sans-serif';
   ctx.fillStyle='rgba(100,130,180,0.7)'; ctx.textAlign='left';
   ctx.shadowBlur=0;
-  ctx.fillText('FUEL',bx,by-6);
+  ctx.fillText(opts.label||'FUEL',bx,by-6);
   ctx.textAlign='right'; ctx.fillStyle=fc;
   ctx.fillText(fuelVal.toFixed(0)+'%',bx+bw,by-6);
   ctx.textAlign='left'; ctx.restore();
@@ -1742,7 +1800,9 @@ function evalM4State(dE,dM,realDt) {
     if (m4State.stableTimer>=M4_HOLD&&!transition.active){
       endM4('win','MISSION COMPLETE');
       missionLog.m4={time:(performance.now()-m4State.missionStartTime)/1000,fuel:m4Rocket.fuel,maxSpeed:m4State.maxSpeed};
-      transition.start(function(){scene='endgame';musicPlayScene('endgame'); musicAttribShow();});
+      progress.unlockMission4();
+      var _m5f=m4Rocket.fuel; m5EntryFuel=_m5f;
+      transition.start(function(){scene='m5';resetM5(_m5f);musicPlayScene('m5'); musicAttribShow();});
     }
   } else {
     m4State.stableTimer=0;
@@ -1858,7 +1918,7 @@ function drawM4HUD(moon) {
   var dM=Math.hypot(m4Rocket.x-moon.x,m4Rocket.y-moon.y),warp=WARP_LEVELS[m4State.warpIdx];
   var fuelPct=Math.max(0,Math.min(1,m4Rocket.fuel/100));
   if (m4State.outcome==='playing') drawStatusBar(m4State.message);
-  drawFuelBar(fuelPct,m4Rocket.fuel);
+  drawFuelBar(fuelPct,m4Rocket.fuel,{markers:[{pct:0.20,label:'TARGET',color:'#4ade80'}]});
   drawSpeedGauge(speed);
   if (m4State.outcome==='playing'&&m4State.stableTimer>0) drawHoldRing(m4State.stableTimer, M4_HOLD, '96,165,250');
   drawTelemetryPills([{label:'EARTH',value:dE.toFixed(0)+' u'},{label:'MOON',value:dM.toFixed(0)+' u'},{label:'WARP',value:warp+'\u00d7'}]);
@@ -2203,6 +2263,591 @@ function drawM0OutcomeBanner(){
   drawOutcomeBanner(m0State.outcome,m0State.message,{retryKey:'retryM0',retryLabel:'\u21ba Retry',winLine1:'\uD83C\uDF0D  ORBIT ACHIEVED',winLine2:'STAGE 1 SEPARATED — MISSION COMPLETE',hint:'Pitch over after launch to go downrange'});
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// M5 — REENTRY
+// ════════════════════════════════════════════════════════════════════════════
+// World coords: x = downrange distance, y = -altitude (canvas convention, so angles,
+// thrust maths and drawing work exactly like the other missions).
+// Phases: deorbit burn → service module separation at the entry interface →
+// entry (attitude = tilt relative to the airflow, tilt gives lift) → drogue → main → splashdown.
+
+const M5_CAP_SX = W * 0.38; // capsule's fixed screen x (camera follows it downrange)
+
+function m5Wrap(a) { return ((a + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI; }
+
+function m5Density(alt) {
+  if (alt >= M5_ATMO_TOP) return 0;
+  return Math.exp(-Math.max(0, alt) / M5_SCALE_H) - M5_RHO_TOP; // continuous: exactly 0 at the top
+}
+
+// One integration step. b: {x,y,vx,vy} (mutated). c: {angle, chute, chuteT, separated, thrust, k?}
+// Shared by the live physics, the prediction and the jettisoned service module.
+function m5Step(b, dt, c) {
+  const rho = m5Density(-b.y);
+  const v = Math.hypot(b.vx, b.vy) || 1e-6;
+  const open = Math.min(1, c.chuteT / M5_CHUTE_OPEN); // canopies inflate gradually (no infinite snatch load)
+  const K = c.k || (c.chute === 2 ? M5_K_DROGUE + (M5_K_MAIN - M5_K_DROGUE) * open
+                  : c.chute === 1 ? M5_K_CAPSULE + (M5_K_DROGUE - M5_K_CAPSULE) * open
+                  : M5_K_CAPSULE);
+  const aDrag = K * rho * v * v;
+  // Lift acts perpendicular to the velocity, on the "up" side, scaled by how far the
+  // nose is tilted toward up (full lift at the edge of the shield's protected cone).
+  let ux = b.vy / v, uy = -b.vx / v; if (uy > 0) { ux = -ux; uy = -uy; }
+  let aLift = 0, liftFrac = 0;
+  if (!c.chute && c.separated) {
+    liftFrac = Math.max(-1, Math.min(1, (Math.cos(c.angle)*ux + Math.sin(c.angle)*uy) / Math.sin(M5_SHIELD_HALF)));
+    aLift = M5_LD * M5_K_CAPSULE * rho * v * v * liftFrac;
+  }
+  const gEff = M5_G * (1 - (b.vx*b.vx) / (M5_ORBIT_V*M5_ORBIT_V)); // gravity relieved by orbital speed
+  b.vy += gEff * dt;
+  if (c.thrust) { b.vx += Math.cos(c.angle) * c.thrust * dt; b.vy += Math.sin(c.angle) * c.thrust * dt; }
+  b.vx += ux * aLift * dt; b.vy += uy * aLift * dt;
+  const f = 1 / (1 + K * rho * v * dt); // semi-implicit drag: stable even under the main chute
+  b.vx *= f; b.vy *= f;
+  b.x += b.vx * dt; b.y += b.vy * dt;
+  return { rho, v, liftFrac, gLoad: Math.hypot(aDrag, aLift) / M5_G };
+}
+
+// Heating for one step. h: {heat, shield} (mutated; also gets q and off). Returns true on burn-through.
+// The shield is the capsule's base, so it faces the airflow when the nose points retrograde.
+function m5Heat(h, b, angle, dt) {
+  const v = Math.hypot(b.vx, b.vy) || 1e-6;
+  const q = m5Density(-b.y) * Math.pow(v / 1000, 3);
+  const off = Math.acos(Math.max(-1, Math.min(1, -(Math.cos(angle)*b.vx + Math.sin(angle)*b.vy) / v)));
+  let mult = 1;
+  if (off <= M5_SHIELD_HALF + 1e-6 && h.shield > 0) h.shield = Math.max(0, h.shield - q * M5_ABLATE * dt); // epsilon: exactly at the cone edge counts as protected
+  else mult = M5_HEAT_BARE;
+  h.heat = Math.max(0, h.heat + (q * M5_HEAT_IN * mult - h.heat * M5_HEAT_OUT) * dt);
+  h.q = q; h.off = off;
+  return h.heat >= 100;
+}
+
+function resetM5(startFuel) {
+  if (startFuel === undefined) startFuel = 100;
+  collisionFilter.reset();
+  uiHitBoxes.retryM5 = null; uiHitBoxes.backToTitle = null;
+  m5State = {
+    warpIdx: 0, orientMode: 'retrograde', outcome: 'playing',
+    message: 'DEORBIT BURN — POINT RETROGRADE AND BURN',
+    trail: [], separated: false, sepReal: 0, tilt: 0, cueDrogue: false, cueMain: false,
+    heat: 0, shield: 100, q: 0, off: 0, gLoad: 0, liftFrac: 0, chute: 0, chuteT: 0,
+    module: null, pred: null, predTick: 0, shake: 0, winDelay: 0,
+    missionStartTime: performance.now(), maxSpeed: 0,
+  };
+  m5Rocket = { x: 0, y: -M5_START_ALT, vx: M5_ORBIT_V, vy: 0, angle: Math.PI, fuel: startFuel };
+  setThrustButtonMode('thrust');
+  document.getElementById('btn-prograde')?.classList.toggle('pressed', false);
+  document.getElementById('btn-retrograde')?.classList.toggle('pressed', true);
+}
+
+function endM5(o, m) { m5State.outcome = o; m5State.message = m; }
+
+// Drop time warp to 1× at decision points (entry, drogue window, main window), so warp
+// can never skip past a moment where the player has to act.
+function m5Unwarp() {
+  if (m5State.warpIdx === 0) return;
+  m5State.warpIdx = 0;
+  resetWarpCycleBtn();
+  document.querySelectorAll('.warp-btn').forEach((b, j) => b.classList.toggle('active', j === 0));
+}
+
+function m5Separate() {
+  const s = m5State, r = m5Rocket;
+  s.separated = true; s.sepReal = 0;
+  m5Unwarp();
+  s.tilt = m5Wrap(r.angle - Math.atan2(-r.vy, -r.vx)); // keep the current attitude
+  s.module = { x: r.x - Math.cos(r.angle) * 22, y: r.y - Math.sin(r.angle) * 22, vx: r.vx - 6, vy: r.vy + 4,
+               angle: r.angle, spin: 0.8, burn: 0, q: 0 };
+  setThrustButtonMode('chute');
+}
+
+// Space / W / ↑ (fresh press) or the touch CHUTE button.
+function m5RequestChute() {
+  const s = m5State, r = m5Rocket;
+  if (!s || s.outcome !== 'playing' || !s.separated || transition.active) return;
+  if (s.sepReal < M5_CHUTE_LOCK) return; // ignore presses right after separation
+  const v = Math.hypot(r.vx, r.vy);
+  if (s.chute === 0) {
+    if (v > M5_DROGUE_MAX) return endM5('lose', 'DROGUE TORN — OPENED AT ' + v.toFixed(0) + ' u/s');
+    s.chute = 1; s.chuteT = 0;
+  } else if (s.chute === 1 && s.chuteT >= M5_CHUTE_OPEN) {
+    if (v > M5_MAIN_MAX) return endM5('lose', 'MAIN CHUTE TORN — OPENED AT ' + v.toFixed(0) + ' u/s');
+    s.chute = 2; s.chuteT = 0;
+  }
+}
+
+function updateM5(realDt) {
+  const s = m5State, r = m5Rocket;
+  s.shake = Math.max(0, s.shake - realDt * 3);
+  if (s.outcome === 'win') {
+    s.winDelay -= realDt;
+    if (s.winDelay <= 0 && !transition.active && scene === 'm5')
+      transition.start(function(){ scene = 'endgame'; setThrustButtonMode('thrust'); musicPlayScene('endgame'); musicAttribShow(); });
+    return;
+  }
+  if (s.outcome !== 'playing') return;
+
+  const warp = WARP_LEVELS[s.warpIdx], simDt = realDt * TIME_SCALE * warp, NSUB = warp * 2, dt = simDt / NSUB;
+  const left  = keys.has('ArrowLeft')  || keys.has('KeyA');
+  const right = keys.has('ArrowRight') || keys.has('KeyD');
+  const thrusting = !s.separated && (keys.has('ArrowUp') || keys.has('KeyW') || keys.has('Space')) && r.fuel > 0;
+  if (s.separated) s.sepReal += realDt;
+
+  if (left || right) {
+    s.orientMode = null;
+    document.getElementById('btn-prograde')?.classList.remove('pressed');
+    document.getElementById('btn-retrograde')?.classList.remove('pressed');
+  }
+  if (!s.separated) {
+    // Free attitude before separation, exactly like the other missions
+    if (left)  r.angle -= ROT_SPEED * realDt * warp;
+    if (right) r.angle += ROT_SPEED * realDt * warp;
+    if (s.orientMode && !left && !right) {
+      const pro = Math.atan2(r.vy, r.vx), tgt = s.orientMode === 'prograde' ? pro : pro + Math.PI;
+      const d = m5Wrap(tgt - r.angle), step = ROT_SPEED * 1.5 * realDt;
+      if (Math.abs(d) < step) r.angle = tgt; else r.angle += Math.sign(d) * step;
+    }
+  } else if (s.chute) {
+    s.tilt = 0; // hanging under a canopy
+  } else {
+    // The capsule is aerodynamically stable: attitude is a tilt relative to the airflow.
+    // A/D change the tilt (can't be pushed past ±60°); Q returns to shield-forward, E flips it (fatal).
+    const step = M5_TILT_RATE * realDt * warp;
+    const nt = s.tilt + (right ? step : 0) - (left ? step : 0);
+    if (Math.abs(nt) <= M5_TILT_MAX || Math.abs(nt) < Math.abs(s.tilt)) s.tilt = nt;
+    if (s.orientMode && !left && !right) {
+      const tgt = s.orientMode === 'retrograde' ? 0 : Math.PI;
+      const d = m5Wrap(tgt - s.tilt), st = M5_TILT_RATE * 2 * realDt;
+      s.tilt = Math.abs(d) < st ? tgt : s.tilt + Math.sign(d) * st;
+    }
+  }
+
+  for (let i = 0; i < NSUB; i++) {
+    if (s.outcome !== 'playing') break;
+    if (!s.separated && -r.y < M5_ATMO_TOP) m5Separate();
+    if (s.separated) {
+      r.angle = Math.atan2(-r.vy, -r.vx) + s.tilt;
+      if (m5Heat(s, r, r.angle, dt)) {
+        s.shake = 1;
+        endM5('lose', s.shield > 0 ? 'BURNED UP — HEAT SHIELD OVERWHELMED' : 'BURNED UP — HEAT SHIELD ABLATED AWAY');
+        break;
+      }
+    }
+    if (s.chute) s.chuteT += dt;
+    if (thrusting) r.fuel = Math.max(0, r.fuel - M5_FUEL_DRAIN * dt);
+    const aero = m5Step(r, dt, { angle: r.angle, chute: s.chute, chuteT: s.chuteT, separated: s.separated,
+                                 thrust: thrusting && r.fuel > 0 ? M5_THRUST : 0 });
+    s.gLoad = aero.gLoad; s.liftFrac = aero.liftFrac;
+    if (aero.v > s.maxSpeed) s.maxSpeed = aero.v;
+    if (s.module) {
+      const m = s.module;
+      const ma = m5Step(m, dt, { angle: m.angle, chute: 0, chuteT: 0, separated: false, thrust: 0, k: M5_K_CAPSULE * 1.6 });
+      m.q = ma.rho * Math.pow(ma.v / 1000, 3);
+      m.burn = Math.min(1, m.burn + m.q * 25 * dt); // no shield: it tumbles and burns up
+      m.angle += m.spin * dt;
+      if (m.burn >= 1 || m.y >= 0) s.module = null;
+    }
+    const last = s.trail[s.trail.length-1];
+    if (!last || Math.hypot(r.x-last.x, r.y-last.y) > 20) { s.trail.push({x:r.x, y:r.y}); if (s.trail.length > TRAIL_MAX) s.trail.shift(); }
+    evalM5State();
+  }
+  if (s.separated && !s.chute) s.shake = Math.max(s.shake, Math.min(1, s.q / 0.05) * 0.6);
+}
+
+function evalM5State() {
+  const s = m5State, r = m5Rocket, alt = -r.y;
+  const v = Math.hypot(r.vx, r.vy);
+  if (alt <= 0) {
+    r.y = 0;
+    if (v <= M5_SPLASH_MAX) return m5Win();
+    return endM5('lose', s.chute === 2 ? 'HARD SPLASHDOWN — ' + v.toFixed(0) + ' u/s'
+                       : s.chute === 1 ? 'HARD SPLASHDOWN — MAIN CHUTE NOT DEPLOYED'
+                       : 'HARD SPLASHDOWN — NO PARACHUTE');
+  }
+  if (s.separated && alt > M5_ATMO_TOP && r.vy < 0) return endM5('lose', 'SKIPPED OFF THE ATMOSPHERE');
+  if (!s.separated && alt > M5_START_ALT + 1500) return endM5('lose', 'LOST IN SPACE');
+  if (!s.separated && r.fuel <= 0 && s.pred && s.pred.outcome === 'orbit') return endM5('lose', 'OUT OF FUEL — STRANDED IN ORBIT');
+
+  // Guidance
+  if (!s.separated) {
+    const burning = (keys.has('ArrowUp') || keys.has('KeyW') || keys.has('Space')) && r.fuel > 0;
+    s.message = burning ? 'DEORBIT BURN'
+      : (!s.pred || s.pred.outcome === 'orbit') ? 'DEORBIT BURN — POINT RETROGRADE AND BURN'
+      : 'COASTING TO ENTRY INTERFACE';
+  } else if (s.chute === 0) {
+    if (v <= M5_DROGUE_MAX && !s.cueDrogue) { s.cueDrogue = true; m5Unwarp(); }
+    if (s.off > M5_SHIELD_HALF) s.message = 'SHIELD NOT FACING THE AIRFLOW!';
+    else if (v <= M5_DROGUE_MAX) s.message = 'DEPLOY DROGUE — PRESS SPACE';
+    else if (s.q > 0.02) s.message = 'PLASMA BLACKOUT — HOLD THE SHIELD FORWARD';
+    else s.message = 'ENTRY INTERFACE — TILT UP FOR LIFT';
+  } else if (s.chute === 1) {
+    const mainOk = v <= M5_MAIN_MAX && s.chuteT >= M5_CHUTE_OPEN;
+    if (mainOk && !s.cueMain) { s.cueMain = true; m5Unwarp(); }
+    s.message = mainOk ? 'DEPLOY MAIN CHUTE — PRESS SPACE' : 'DROGUE OUT — MAIN BELOW ' + M5_MAIN_MAX + ' u/s';
+  } else {
+    s.message = 'MAIN CHUTE OUT — STAND BY FOR SPLASHDOWN';
+  }
+}
+
+function m5Win() {
+  const s = m5State, r = m5Rocket;
+  const dist = Math.abs(r.x - M5_SHIP_X);
+  const stars = dist < 1500 ? 3 : dist < 5000 ? 2 : 1;
+  endM5('win', 'SPLASHDOWN!');
+  missionLog.m5 = { time: (performance.now() - s.missionStartTime) / 1000, fuel: s.shield, maxSpeed: s.maxSpeed, stars, shipDist: dist };
+  s.winDelay = 3;
+}
+
+// Predicts the capsule's path assuming the current tilt is held and no more thrust.
+// Returns { pts, mark: {x,y,tone,icon,label}|null, outcome }.
+function predictM5Path() {
+  const s = m5State, r = m5Rocket;
+  const b = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
+  const h = { heat: s.heat, shield: s.shield };
+  let sep = s.separated, chute = s.chute, chuteT = s.chuteT;
+  const tilt = s.separated ? s.tilt : m5Wrap(r.angle - Math.atan2(-r.vy, -r.vx));
+  const DT = 0.1, pts = [{x:b.x, y:b.y}];
+  let mark = null, outcome = 'orbit';
+  for (let i = 0; i < 2500; i++) {
+    if (!sep && -b.y < M5_ATMO_TOP) sep = true;
+    const angle = sep ? Math.atan2(-b.vy, -b.vx) + (chute ? 0 : tilt) : r.angle;
+    if (sep && m5Heat(h, b, angle, DT)) { mark = { x:b.x, y:b.y, tone:'danger', icon:'x', label:'⚠ BURN-UP' }; outcome = 'burn'; break; }
+    if (chute) chuteT += DT;
+    m5Step(b, DT, { angle, chute, chuteT, separated: sep, thrust: 0 });
+    if (i % 2 === 0) pts.push({x:b.x, y:b.y});
+    const v = Math.hypot(b.vx, b.vy);
+    if (sep && -b.y > M5_ATMO_TOP && b.vy < 0) { mark = { x:b.x, y:b.y, tone:'warn', icon:'x', label:'⚠ SKIP-OUT' }; outcome = 'skip'; break; }
+    if (-b.y > M5_START_ALT + 1500) { outcome = 'lost'; break; }
+    if (sep && chute === 0 && v <= M5_DROGUE_MAX) { mark = { x:b.x, y:b.y, tone:'safe', icon:'check', label:'✓ CHUTE ZONE' }; outcome = 'corridor'; break; }
+    if (-b.y <= 0) {
+      const ok = v <= M5_SPLASH_MAX;
+      mark = { x:b.x, y:0, tone: ok ? 'safe' : 'warn', icon: ok ? 'check' : 'arrow',
+               label: ok ? '✓ SPLASHDOWN' : (chute === 1 ? '⚠ DEPLOY MAIN' : '⚠ HARD SPLASHDOWN') };
+      outcome = ok ? 'splash' : 'hard'; break;
+    }
+  }
+  pts.push({x:b.x, y:b.y});
+  return { pts, mark, outcome };
+}
+
+// ── M5 rendering ─────────────────────────────────────────────────────────────
+
+let _m5SkyGrad = null, _m5SeaGrad = null;
+function m5SkyGradient() {
+  if (_m5SkyGrad) return _m5SkyGrad;
+  const ei = (M5_GROUND_SY - M5_ATMO_TOP * M5_VIEW_Z) / M5_GROUND_SY; // entry interface, as a gradient stop
+  const g = ctx.createLinearGradient(0, 0, 0, M5_GROUND_SY);
+  g.addColorStop(0, '#020610'); g.addColorStop(ei - 0.09, '#040a1c'); g.addColorStop(ei, '#0a1a3a');
+  g.addColorStop(0.86, '#1a4a8a'); g.addColorStop(1, '#3b7fd0');
+  return (_m5SkyGrad = g);
+}
+function m5SeaGradient() {
+  if (_m5SeaGrad) return _m5SeaGrad;
+  const g = ctx.createLinearGradient(0, M5_GROUND_SY, 0, H);
+  g.addColorStop(0, '#1d4f8f'); g.addColorStop(1, '#071a36');
+  return (_m5SeaGrad = g);
+}
+
+function m5Sx(x) { return M5_CAP_SX + (x - m5Rocket.x) * M5_VIEW_Z; }
+function m5Sy(y) { return M5_GROUND_SY + y * M5_VIEW_Z; }
+
+function m5StrokeWorld(pts, from, to, color, width, dash) {
+  if (to - from < 2) return;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+  ctx.beginPath(); ctx.moveTo(m5Sx(pts[from].x), m5Sy(pts[from].y));
+  for (let i = from + 1; i < to; i++) ctx.lineTo(m5Sx(pts[i].x), m5Sy(pts[i].y));
+  ctx.stroke(); ctx.restore();
+}
+
+function fmtDist(d) { return d >= 1000 ? (d / 1000).toFixed(1) + 'k' : d.toFixed(0); }
+
+function renderM5() {
+  const s = m5State, r = m5Rocket;
+  ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.setLineDash([]);
+  const t = Date.now() / 1000;
+  const eiY = M5_GROUND_SY - M5_ATMO_TOP * M5_VIEW_Z;
+
+  // Sky + stars (stars fade out toward the atmosphere, slow parallax downrange)
+  ctx.fillStyle = m5SkyGradient(); ctx.fillRect(0, 0, W, M5_GROUND_SY);
+  for (const st of STARS) {
+    const sy = st.y * (eiY / H);
+    const a = Math.max(0, Math.min(1, (eiY - sy) / 300)) * st.a;
+    if (a <= 0.02) continue;
+    const sx = ((st.x - r.x * 0.02 * st.depth) % W + W) % W;
+    ctx.globalAlpha = a; ctx.fillStyle = '#dbeafe'; ctx.beginPath(); ctx.arc(sx, sy, st.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Shake during peak heating (screen-space offset of the world)
+  ctx.save();
+  if (s.shake > 0.01 && s.outcome === 'playing') ctx.translate((Math.random()-0.5) * 8 * s.shake, (Math.random()-0.5) * 8 * s.shake);
+
+  // Entry interface
+  ctx.save(); ctx.setLineDash([10, 14]); ctx.strokeStyle = 'rgba(134,239,172,0.22)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, eiY); ctx.lineTo(W, eiY); ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = '600 15px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = 'rgba(134,239,172,0.45)'; ctx.textAlign = 'left';
+  ctx.fillText('ENTRY INTERFACE', 24, eiY - 8); ctx.restore();
+
+  // Horizon haze + sea + waves
+  { const hz = ctx.createLinearGradient(0, M5_GROUND_SY - 90, 0, M5_GROUND_SY);
+    hz.addColorStop(0, 'rgba(147,197,253,0)'); hz.addColorStop(1, 'rgba(147,197,253,0.22)');
+    ctx.fillStyle = hz; ctx.fillRect(0, M5_GROUND_SY - 90, W, 90);
+    ctx.fillStyle = m5SeaGradient(); ctx.fillRect(0, M5_GROUND_SY, W, H - M5_GROUND_SY);
+    ctx.strokeStyle = 'rgba(191,219,254,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, M5_GROUND_SY); ctx.lineTo(W, M5_GROUND_SY); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    for (let k = 0; k < 4; k++) {
+      const wy = M5_GROUND_SY + 16 + k * 30, off = r.x * M5_VIEW_Z * (0.9 + k * 0.08);
+      ctx.strokeStyle = `rgba(147,197,253,${(0.14 - k * 0.025).toFixed(3)})`;
+      ctx.beginPath();
+      for (let sx = 0; sx <= W; sx += 30) {
+        const yy = wy + Math.sin((sx + off) / 70 + t * 1.3 + k) * (2 + k);
+        if (sx === 0) ctx.moveTo(sx, yy); else ctx.lineTo(sx, yy);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Recovery ship (or an edge marker pointing to it)
+  { const shipSx = m5Sx(M5_SHIP_X), gy = M5_GROUND_SY;
+    if (shipSx > -120 && shipSx < W + 120) {
+      ctx.save(); ctx.translate(shipSx, gy);
+      ctx.fillStyle = '#334155';
+      ctx.beginPath(); ctx.moveTo(-70, -6); ctx.lineTo(64, -6); ctx.lineTo(54, 10); ctx.lineTo(-62, 10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#475569'; ctx.fillRect(-30, -24, 40, 18); ctx.fillRect(-20, -36, 18, 12);
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-11, -36); ctx.lineTo(-11, -58); ctx.stroke();
+      const p = 0.5 + 0.5 * Math.sin(t * 4);
+      ctx.fillStyle = `rgba(251,146,60,${(0.5 + 0.5 * p).toFixed(2)})`; ctx.beginPath(); ctx.arc(-11, -60, 4, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = `rgba(251,146,60,${(0.4 * (1 - p)).toFixed(2)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(-11, -60, 6 + 16 * p, 0, Math.PI*2); ctx.stroke();
+      ctx.font = '700 15px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = 'rgba(253,186,116,0.85)'; ctx.textAlign = 'center';
+      ctx.fillText('RECOVERY SHIP', 0, -76);
+      ctx.restore();
+    } else {
+      const ahead = shipSx >= W;
+      const label = ahead ? 'SHIP ' + fmtDist(Math.abs(M5_SHIP_X - r.x)) + ' ▶' : '◀ SHIP ' + fmtDist(Math.abs(M5_SHIP_X - r.x));
+      ctx.save(); ctx.font = '700 16px Inter,ui-sans-serif,sans-serif'; ctx.textAlign = ahead ? 'right' : 'left';
+      const tw = ctx.measureText(label).width + 20, lx = ahead ? W - 24 - tw : 24, ly = M5_GROUND_SY - 46;
+      ctx.fillStyle = 'rgba(6,10,24,0.75)'; rrect(lx, ly, tw, 30, 8); ctx.fill();
+      ctx.fillStyle = 'rgba(253,186,116,0.9)'; ctx.fillText(label, ahead ? W - 34 : 34, ly + 21); ctx.restore();
+    }
+  }
+
+  // Trail
+  m5StrokeWorld(s.trail, 0, s.trail.length, s.separated ? 'rgba(253,186,116,0.45)' : 'rgba(125,211,252,0.4)', 1.5);
+
+  // Prediction (recomputed every 3rd frame — it integrates up to 250 s ahead)
+  if (s.outcome === 'playing') {
+    if (!s.pred || (s.predTick++ % 3) === 0) s.pred = predictM5Path();
+    const pts = s.pred.pts, mk = s.pred.mark;
+    if (mk) {
+      const tail = Math.max(0, pts.length - 14);
+      const tailCol = mk.tone === 'safe' ? 'rgba(74,222,128,0.85)' : mk.tone === 'warn' ? 'rgba(251,191,36,0.85)' : 'rgba(255,80,80,0.75)';
+      m5StrokeWorld(pts, 0, tail + 1, 'rgba(251,211,77,0.55)', 1.5, [8, 8]);
+      m5StrokeWorld(pts, tail, pts.length, tailCol, 2.2);
+    } else {
+      m5StrokeWorld(pts, 0, pts.length, 'rgba(251,211,77,0.55)', 1.5, [8, 8]);
+    }
+  }
+
+  // Jettisoned service module, burning up
+  if (s.module) {
+    const m = s.module, mx = m5Sx(m.x), my = m5Sy(m.y), fade = 1 - m.burn;
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(m.angle);
+    if (m.q > 0.002) {
+      const gl = ctx.createRadialGradient(0, 0, 2, 0, 0, 26);
+      gl.addColorStop(0, `rgba(255,200,120,${(0.8 * Math.min(1, m.q / 0.02)).toFixed(2)})`); gl.addColorStop(1, 'rgba(255,90,30,0)');
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = fade; ctx.fillStyle = '#94a3b8'; ctx.fillRect(-10, -7, 20, 14);
+    ctx.fillStyle = '#475569'; ctx.fillRect(-17, -5, 7, 10);
+    ctx.restore();
+  }
+
+  // Capsule
+  const csx = M5_CAP_SX, csy = m5Sy(r.y);
+  const thrusting = s.outcome === 'playing' && !s.separated && r.fuel > 0 && (keys.has('ArrowUp') || keys.has('KeyW') || keys.has('Space'));
+  if (s.chute) drawM5Chutes(csx, csy, s, r);
+  drawM5Capsule(csx, csy, r.angle, s, thrusting, r);
+  ctx.restore(); // end shake
+
+  // Prediction marker on top (hidden when it would sit on the capsule — the status bar says it then)
+  if (s.outcome === 'playing' && s.pred && s.pred.mark) {
+    const mk = s.pred.mark, mx = m5Sx(mk.x), my = m5Sy(mk.y);
+    if (Math.hypot(mx - csx, my - csy) > 110)
+      drawCollisionWarning({ x: mx, y: my, body: '', tone: mk.tone, icon: mk.icon, label: mk.label });
+  }
+
+  drawM5HUD();
+}
+
+function drawM5Capsule(sx, sy, angle, s, thrusting, r) {
+  const v = Math.hypot(r.vx, r.vy) || 1;
+  const hot = s.separated ? Math.min(1, s.q / 0.04) : 0;
+  // Plasma trail streaming behind the capsule
+  if (hot > 0.03 && !s.chute) {
+    const bx = -r.vx / v, by = -r.vy / v, len = 40 + 220 * hot;
+    const g = ctx.createLinearGradient(sx, sy, sx + bx * len, sy + by * len);
+    g.addColorStop(0, `rgba(255,170,90,${(0.75 * hot).toFixed(2)})`); g.addColorStop(1, 'rgba(255,80,40,0)');
+    ctx.save(); ctx.strokeStyle = g; ctx.lineCap = 'round'; ctx.lineWidth = 6 + 12 * hot;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + bx * len, sy + by * len); ctx.stroke(); ctx.restore();
+  }
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(angle);
+  // local +x = nose; the heat shield is the base at -x
+  if (!s.separated) {
+    ctx.fillStyle = '#94a3b8'; ctx.fillRect(-32, -7, 21, 14);
+    ctx.fillStyle = '#64748b'; ctx.fillRect(-32, -7, 3, 14);
+    ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.moveTo(-32,-4); ctx.lineTo(-39,-7); ctx.lineTo(-39,7); ctx.lineTo(-32,4); ctx.closePath(); ctx.fill();
+    if (thrusting) {
+      const fl = 14 + Math.random() * 10;
+      ctx.fillStyle = 'rgba(251,146,60,' + (0.7 + Math.random() * 0.3) + ')';
+      ctx.beginPath(); ctx.moveTo(-39,-5); ctx.lineTo(-39 - fl, 0); ctx.lineTo(-39, 5); ctx.closePath(); ctx.fill();
+    }
+  }
+  // Shield glow: on the leading side of the capsule (the base when the attitude is right)
+  if (hot > 0.03) {
+    const lx = Math.cos(-angle) * r.vx / v - Math.sin(-angle) * r.vy / v;
+    const ly = Math.sin(-angle) * r.vx / v + Math.cos(-angle) * r.vy / v;
+    const gx = lx * 13, gy = ly * 13, gr = 10 + 26 * hot;
+    const g = ctx.createRadialGradient(gx, gy, 1, gx, gy, gr);
+    g.addColorStop(0, `rgba(255,245,215,${(0.95 * hot).toFixed(2)})`);
+    g.addColorStop(0.4, `rgba(255,150,60,${(0.7 * hot).toFixed(2)})`);
+    g.addColorStop(1, 'rgba(255,60,90,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI*2); ctx.fill();
+  }
+  // Capsule body (truncated cone) + ablative shield
+  ctx.fillStyle = '#e2e8f0';
+  ctx.beginPath(); ctx.moveTo(-11, -10); ctx.lineTo(8, -3.5); ctx.lineTo(8, 3.5); ctx.lineTo(-11, 10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#cbd5e1'; ctx.fillRect(8, -2.5, 3, 5);
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(-2, -4.5, 3.5, 3);
+  const shieldCol = s.shield > 40 ? '#8b5a3c' : s.shield > 0 ? '#5b3a28' : '#2b1d16';
+  ctx.fillStyle = shieldCol;
+  ctx.beginPath(); ctx.moveTo(-11, -10); ctx.quadraticCurveTo(-17, 0, -11, 10); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawM5Chutes(sx, sy, s, r) {
+  const v = Math.hypot(r.vx, r.vy) || 1;
+  const ux = -r.vx / v, uy = -r.vy / v; // canopy trails opposite to the motion
+  const open = Math.min(1, s.chuteT / M5_CHUTE_OPEN);
+  const main = s.chute === 2;
+  const len = (main ? 74 : 44) * (0.45 + 0.55 * open);
+  const rad = (main ? 36 : 12) * (0.25 + 0.75 * open);
+  const cx = sx + ux * len, cy = sy + uy * len, px = -uy, py = ux;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(226,232,240,0.55)'; ctx.lineWidth = 1;
+  for (const k of [-1, -0.45, 0.45, 1]) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx + px * rad * k, cy + py * rad * k); ctx.stroke(); }
+  ctx.translate(cx, cy); ctx.rotate(Math.atan2(uy, ux));
+  ctx.beginPath(); ctx.ellipse(0, 0, rad * 0.55, rad, 0, -Math.PI/2, Math.PI/2); ctx.closePath();
+  ctx.fillStyle = main ? '#f97316' : '#fb923c'; ctx.fill();
+  if (main) {
+    ctx.save(); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = -2; i <= 2; i += 2) ctx.fillRect(0, i * rad / 3 - rad / 6, rad, rad / 3);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Attitude dial (bottom-right): green cone = shield protected, line = capsule nose,
+// grey arrow = direction of travel.
+function drawM5AttitudeDial(s, r) {
+  const cx = W - 130, cy = H - 140, R = 74;
+  const flow = Math.atan2(r.vy, r.vx), retro = flow + Math.PI;
+  const off = Math.abs(m5Wrap(r.angle - retro));
+  const ok = off <= M5_SHIELD_HALF;
+  ctx.save();
+  ctx.fillStyle = 'rgba(6,10,24,0.82)'; ctx.strokeStyle = 'rgba(100,140,255,0.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R + 14, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(74,222,128,0.18)';
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, retro - M5_SHIELD_HALF, retro + M5_SHIELD_HALF); ctx.closePath(); ctx.fill();
+  // direction of travel
+  ctx.strokeStyle = 'rgba(148,163,184,0.55)'; ctx.lineWidth = 2;
+  const fx = cx + Math.cos(flow) * R, fy = cy + Math.sin(flow) * R;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(fx, fy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - Math.cos(flow - 0.4) * 10, fy - Math.sin(flow - 0.4) * 10);
+  ctx.lineTo(fx - Math.cos(flow + 0.4) * 10, fy - Math.sin(flow + 0.4) * 10); ctx.closePath(); ctx.fillStyle = 'rgba(148,163,184,0.55)'; ctx.fill();
+  // capsule nose
+  ctx.strokeStyle = ok ? '#4ade80' : '#f87171'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(r.angle) * (R - 6), cy + Math.sin(r.angle) * (R - 6)); ctx.stroke();
+  ctx.fillStyle = ok ? '#4ade80' : '#f87171'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+  // labels
+  let up = 0;
+  { const v = Math.hypot(r.vx, r.vy) || 1; let ux = r.vy / v, uy = -r.vx / v; if (uy > 0) { ux = -ux; uy = -uy; }
+    up = Math.cos(r.angle) * ux + Math.sin(r.angle) * uy; }
+  const deg = Math.round(off * 180 / Math.PI) * (up >= 0 ? 1 : -1);
+  ctx.textAlign = 'center';
+  ctx.font = '700 15px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = ok ? '#86efac' : '#fca5a5';
+  ctx.fillText(s.separated ? 'TILT ' + (deg > 0 ? '+' : '') + deg + '°' : (ok ? 'RETROGRADE ✓' : 'OFF RETRO ' + Math.abs(deg) + '°'), cx, cy + R + 36);
+  if (s.separated && !s.chute) {
+    ctx.font = '600 13px Inter,ui-sans-serif,sans-serif';
+    ctx.fillStyle = Math.abs(s.liftFrac) < 0.15 ? 'rgba(148,175,220,0.7)' : s.liftFrac > 0 ? '#86efac' : '#fca5a5';
+    ctx.fillText(Math.abs(s.liftFrac) < 0.15 ? 'NEUTRAL' : s.liftFrac > 0 ? 'LIFT ▲' : 'LIFT ▼', cx, cy + R + 54);
+  }
+  ctx.font = '600 11px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = '#4a6080';
+  ctx.fillText('ATTITUDE', cx, cy - R - 20);
+  ctx.textAlign = 'left'; ctx.restore();
+}
+
+// Verdict of the trajectory prediction, under the status bar. The marker on the path is
+// often far off-screen during the deorbit burn, which is exactly when this matters most.
+const M5_PRED_TEXT = {
+  orbit:    ['STILL IN ORBIT — BURN RETROGRADE', '148,175,220'],
+  lost:     ['⚠ ESCAPING ORBIT',                '255,120,120'],
+  corridor: ['✓ ENTRY IN CORRIDOR',             '134,239,172'],
+  skip:     ['⚠ SKIP-OUT PREDICTED',            '253,211,77'],
+  burn:     ['⚠ BURN-UP PREDICTED',             '255,120,120'],
+  hard:     ['⚠ HARD SPLASHDOWN PREDICTED',     '253,211,77'],
+  splash:   ['✓ SAFE SPLASHDOWN',               '134,239,172'],
+};
+function drawM5PredictionReadout(pred) {
+  if (!pred || !M5_PRED_TEXT[pred.outcome]) return;
+  let [text, rgb] = M5_PRED_TEXT[pred.outcome];
+  // Targeting feedback: where the predicted chute zone / splash point is relative to the ship
+  if (pred.mark && (pred.outcome === 'corridor' || pred.outcome === 'splash' || pred.outcome === 'hard')) {
+    const d = pred.mark.x - M5_SHIP_X;
+    text += '  ·  ' + (Math.abs(d) < 400 ? 'ON THE SHIP' : fmtDist(Math.abs(d)) + (d < 0 ? ' SHORT OF SHIP' : ' PAST SHIP'));
+  }
+  ctx.save(); ctx.font = '700 17px Inter,ui-sans-serif,sans-serif'; ctx.textAlign = 'center';
+  const bw = ctx.measureText(text).width + 32, bx = W/2 - bw/2, by = 78;
+  ctx.fillStyle = 'rgba(6,10,24,0.78)'; ctx.strokeStyle = `rgba(${rgb},0.45)`; ctx.lineWidth = 1;
+  rrect(bx, by, bw, 32, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = `rgb(${rgb})`; ctx.fillText(text, W/2, by + 22);
+  ctx.textAlign = 'left'; ctx.restore();
+}
+
+function drawM5HUD() {
+  const s = m5State, r = m5Rocket;
+  const speed = Math.hypot(r.vx, r.vy), alt = Math.max(0, -r.y), warp = WARP_LEVELS[s.warpIdx];
+  if (s.outcome === 'playing') { drawStatusBar(s.message); drawM5PredictionReadout(s.pred); }
+  if (s.separated) drawFuelBar(Math.max(0, Math.min(1, s.shield / 100)), s.shield, { label: 'SHIELD' });
+  else drawFuelBar(Math.max(0, Math.min(1, r.fuel / 100)), r.fuel);
+  drawSpeedGauge(speed, 2000);
+  const altC = alt > M5_ATMO_TOP ? '#ccddf8' : '#38bdf8';
+  const vs = r.vy, vsC = s.chute ? (vs > M5_SPLASH_MAX ? '#fbbf24' : '#4ade80') : '#ccddf8';
+  const gC = s.gLoad < 4 ? '#4ade80' : s.gLoad < 8 ? '#fbbf24' : '#f87171';
+  const hC = s.heat < 50 ? '#4ade80' : s.heat < 80 ? '#fbbf24' : '#f87171';
+  drawTelemetryPills([
+    { label: 'ALT', value: alt.toFixed(0) + ' u', color: altC },
+    { label: 'V-SPEED', value: (vs >= 0 ? '▼ ' : '▲ ') + Math.abs(vs).toFixed(0), color: vsC },
+    { label: 'G-LOAD', value: s.gLoad.toFixed(1) + ' g', color: gC },
+    { label: 'HULL HEAT', value: Math.round(s.heat) + '%', color: hC },
+    { label: 'WARP', value: warp + '×', color: '#ccddf8' },
+  ]);
+  if (!s.chute && s.outcome === 'playing') drawM5AttitudeDial(s, r);
+  drawMusicAttrib();
+  if (s.outcome === 'win') {
+    const d = missionLog.m5 ? missionLog.m5.shipDist : 0, stars = missionLog.m5 ? missionLog.m5.stars : 1;
+    ctx.save(); ctx.textAlign = 'center';
+    ctx.font = '800 44px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = '#86efac';
+    ctx.fillText('🪂  SPLASHDOWN!', W/2, H/2 - 60);
+    ctx.font = '600 22px Inter,ui-sans-serif,sans-serif'; ctx.fillStyle = 'rgba(134,239,172,0.85)';
+    ctx.fillText(fmtDist(d) + ' u from the recovery ship   ' + '⭐'.repeat(stars), W/2, H/2 - 20);
+    ctx.restore();
+  } else if (!transition.active) {
+    drawOutcomeBanner(s.outcome, s.message, { retryKey: 'retryM5', retryLabel: '↺ Retry',
+      hint: 'Shield forward · tilt up for lift · drogue ≤' + M5_DROGUE_MAX + ', main ≤' + M5_MAIN_MAX + ' u/s' });
+  }
+}
+
 var _leftCtrl, _rightCtrl;
 function initTouchUI() {
   _leftCtrl  = document.querySelector('.side-ctrl.left-ctrl');
@@ -2220,6 +2865,12 @@ function setTouchUIVisible(vis) {
     else     el.classList.add('hidden');
   });
   if (vis) { resetWarpCycleBtn(); }
+}
+// M5 turns the touch THRUST button into the parachute button after separation.
+function setThrustButtonMode(mode) {
+  const btn = document.getElementById('btn-thrust');
+  if (!btn) return;
+  btn.innerHTML = mode === 'chute' ? '◎<br><span>CHUTE</span>' : '▲<br><span>THRUST</span>';
 }
 
 let lastNow = null;
@@ -2239,6 +2890,7 @@ function loop(now) {
   if (scene==='landing' && lState.outcome==='playing') updateLandingPhysics(realDt);
   if (scene==='m3' && m3State.outcome==='playing') updateM3Physics(realDt);
   if (scene==='m4' && m4State.outcome==='playing') updateM4Physics(realDt);
+  if (scene==='m5') updateM5(realDt);
   transition.update(realDt);
   if (scene !== 'title') musicAttribTick(realDt);
 
@@ -2249,6 +2901,7 @@ function loop(now) {
   else if (scene==='landing') renderLanding();
   else if (scene==='m3')      renderM3();
   else if (scene==='m4')      renderM4();
+  else if (scene==='m5')      renderM5();
   transition.draw();
 
   requestAnimationFrame(loop);
@@ -2307,6 +2960,7 @@ function loop(now) {
         const tgt=getActiveState();
         if (tgt) { tgt.orientMode=null; document.getElementById('btn-prograde')?.classList.remove('pressed'); document.getElementById('btn-retrograde')?.classList.remove('pressed'); }
       }
+      if (id==='btn-thrust' && scene==='m5') m5RequestChute(); // pointerdown is a fresh press by nature
       setP(true);
     },{passive:false});
     el.addEventListener('pointerup',e=>{e.preventDefault();setP(false);},{passive:false});
@@ -2391,5 +3045,7 @@ m3State = { orientMode: null, warpIdx: 0, outcome: 'playing', message: '', trail
 m3Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
 m4State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], stableTimer: 0, moonAngle: 0, earthAngle: 0, missionStartTime: performance.now(), maxSpeed: 0 };
 m4Rocket = { x: CX, y: CY, vx: 0, vy: 0, angle: 0, fuel: 100 };
+m5State  = { orientMode: 'retrograde', warpIdx: 0, outcome: 'playing', message: '', trail: [], separated: false, chute: 0 };
+m5Rocket = { x: 0, y: -M5_START_ALT, vx: M5_ORBIT_V, vy: 0, angle: Math.PI, fuel: 100 };
 
 requestAnimationFrame(loop);

@@ -94,7 +94,7 @@ _Updated: 2026-04-07 — top 3+1 bugs fixed + dead code cleanup + symplectic Eul
 - **Throttle trajectory prediction** — recalculate only when |delta-v| > epsilon or every 3rd frame. Biggest CPU saving available.
 - **Replace rrect manual arcTo** with ctx.roundRect() — now baseline in all modern browsers, 1 line vs 6.
 - ~~**Dead code cleanup**~~ ✅ Fixed 2026-04-07 — removed `m0Stage1Sep`, fixed identity ternary in `resetLanding`, extracted `LAND_FUEL_RATIO` constant.
-- **Mission 5 Reentry** — heat shield (angle of attack, thermal load), parachute deploy. The locked card slot is already on the title screen.
+- ~~**Mission 5 Reentry**~~ ✅ Added 2026-11-16 — deorbit burn, service-module separation, lift-by-tilt entry with heat shield/ablation, drogue + main chutes, splashdown rated on distance to the recovery ship. Physics tuned with a headless sim; built on the `SCENES` registry.
 
 ---
 
